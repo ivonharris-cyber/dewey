@@ -1,12 +1,14 @@
-"""Core library logic: discover silos, build the dated log, scan repos for leaks.
+"""Core library logic: discover silos, build the dated log, scan repos for leaks,
+and shelve memory into a browsable Markdown library.
 
 No secret values are ever read or printed — `doctor` checks git-tracking and
-.gitignore coverage only, by filename.
+.gitignore coverage only, and `sync` skips credential-named files entirely.
 """
 from __future__ import annotations
 
 import os
 import re
+import shutil
 import subprocess
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -18,6 +20,21 @@ CLAUDE = Path.home() / ".claude"
 _PREFIX_RE = re.compile(r"^(feedback|project|reference|user|session|decision|soul)[_-]", re.IGNORECASE)
 _PRUNE_DIRS = {"node_modules", ".git", ".venv", "venv", "__pycache__", "dist", "build", ".next", "target", ".cache"}
 _ENV_EXEMPT = {".env.example", ".env.sample", ".env.template", ".env.dist"}
+_SENSITIVE_RE = re.compile(
+    r"(api[-_]?key|credential|secret|token|password|[-_]login|keystore|\.key$|\.env)",
+    re.IGNORECASE,
+)
+
+_CLASS_BY_CATEGORY = {
+    "feedback": "100-people",
+    "user": "100-people",
+    "soul": "300-agents",
+    "decision": "300-agents",
+    "project": "400-projects",
+    "reference": "500-reference",
+    "session": "900-sessions",
+    "note": "000-meta",
+}
 
 
 def is_env_file(name: str) -> bool:
@@ -26,6 +43,11 @@ def is_env_file(name: str) -> bool:
     if low in _ENV_EXEMPT:
         return False
     return low == ".env" or low.startswith(".env.") or low.endswith(".env")
+
+
+def is_sensitive(name: str) -> bool:
+    """True for files whose name suggests they hold credentials — never auto-copied by sync."""
+    return bool(_SENSITIVE_RE.search(name))
 
 
 @dataclass
@@ -170,3 +192,42 @@ def doctor_env(root: Path) -> list[RepoHealth]:
             verdict = "ok"
         out.append(RepoHealth(repo.name, verdict, present, covered, tracked, ever))
     return out
+
+
+# --- sync: shelve memory into a browsable Markdown library --------------------
+
+
+@dataclass
+class SyncPlan:
+    copied: list[tuple[Path, Path]]
+    skipped_sensitive: list[Path]
+
+
+def plan_sync(silos: list[Silo], target: Path) -> SyncPlan:
+    """Plan a library mirror: silo files -> target/<class>/<silo>/<file>, skipping secrets."""
+    target = Path(target)
+    copied: list[tuple[Path, Path]] = []
+    skipped: list[Path] = []
+    for silo in silos:
+        for f in silo.files:
+            if is_sensitive(f.name):
+                skipped.append(f)
+                continue
+            category, _ = categorize(f.stem)
+            klass = _CLASS_BY_CATEGORY.get(category, "000-meta")
+            copied.append((f, target / klass / silo.name / f.name))
+    return SyncPlan(copied, skipped)
+
+
+def apply_sync(plan: SyncPlan, target: Path) -> None:
+    """Write the planned library, then an index of what was shelved."""
+    target = Path(target)
+    for src, dest in plan.copied:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dest)
+    lines = ["# Dewey Library — index", ""]
+    lines += [f"- `{dest.relative_to(target)}`" for _, dest in sorted(plan.copied, key=lambda c: str(c[1]))]
+    if plan.skipped_sensitive:
+        lines += ["", "## Skipped (sensitive — never auto-copied)", ""]
+        lines += [f"- {p.name}" for p in plan.skipped_sensitive]
+    (target / "LIBRARY-INDEX.md").write_text("\n".join(lines) + "\n", encoding="utf-8")

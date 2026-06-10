@@ -7,6 +7,10 @@
 
 Stardate 10-06-2026. Built because Ivon the Dyslexic Nerd found 430 stray memories across 18 silos.
 
+**Why it exists:** you build the Notion, you build the vault — but your coding agent still *forgets*,
+because its memory is siloed and never auto-read from those stores. Dewey is the bridge that keeps the
+Coder **tidy and un-forgetting.**
+
 ---
 
 ## Philosophy — micronisation
@@ -89,7 +93,7 @@ A Claude reads its `memory.md` card, **checks out** the books it needs for conte
 | `dewey checkout` | 🛠️ planned | Load Dewey call-numbers into a silo |
 | `dewey checkin` | 🛠️ planned | Sync a silo back to the vault, leave pointer stubs |
 | `dewey balance` | 🛠️ planned | Self-healing reconcile across all silos + vault |
-| `dewey sync` | 🛠️ planned | One-way push of facts into your Obsidian vault |
+| `dewey sync` | ✅ working | Shelve memory into a browsable Markdown library (secret-aware, dry-run) |
 
 ---
 
@@ -126,10 +130,12 @@ Dewey (the library) is meant to run with two helpers:
 - `dewey doctor` **finds** leaks (tracked `.env`, missing ignore rules) — it never prints secret values.
 - Before open-sourcing, run it through a sanitizer pass. The tool helps *others* find their leaks too.
 
-## Install (local dev)
+## Install
+
+See **[SETUP.md](SETUP.md)** for the full guide. Quickest path (global command):
 
 ```
-pip install -e .
+pipx install git+https://github.com/ivonharris-cyber/dewey
+dewey --version
 dewey sweep
-dewey doctor D:\projects
 ```

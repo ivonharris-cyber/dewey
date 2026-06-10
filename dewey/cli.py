@@ -4,14 +4,13 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from . import core
+from . import __version__, core
 
 _PLANNED = (
     "Designed, not yet implemented — see the library model in README.md.\n"
     "  checkout : load Dewey call-numbers into a silo\n"
     "  checkin  : sync a silo back to the vault, leave pointer stubs\n"
-    "  balance  : self-healing reconcile across all silos + the vault\n"
-    "  sync     : one-way push of facts into your Obsidian vault"
+    "  balance  : self-healing reconcile across all silos + the vault"
 )
 
 
@@ -43,13 +42,27 @@ def cmd_doctor(args: argparse.Namespace) -> None:
     print(f"Scanning git repos under {root} for .env leaks (no secrets read)\n")
     leaks = 0
     for h in core.doctor_env(root):
-        flag = "ok " if h.verdict == "ok" else "!! "
         if h.verdict != "ok":
             leaks += 1
+        flag = "ok " if h.verdict == "ok" else "!! "
         print(f"{flag}{h.name:26} {h.verdict}")
         if h.env_files:
             print(f"       env: {', '.join(h.env_files)}  (ignored={h.gitignore_covers_env})")
     print(f"\n{leaks} repo(s) need attention.")
+
+
+def cmd_sync(args: argparse.Namespace) -> None:
+    target = Path(args.to).resolve()
+    plan = core.plan_sync(core.discover_silos(), target)
+    print(f"Library target: {target}")
+    print(f"  {len(plan.copied)} books to shelve - {len(plan.skipped_sensitive)} skipped (sensitive)")
+    for p in plan.skipped_sensitive[:15]:
+        print(f"    skip (sensitive): {p.name}")
+    if not args.apply:
+        print("\n(dry-run) add --apply to write the library.")
+        return
+    core.apply_sync(plan, target)
+    print(f"\n[ok] Shelved {len(plan.copied)} books into {target}")
 
 
 def cmd_planned(_: argparse.Namespace) -> None:
@@ -57,10 +70,8 @@ def cmd_planned(_: argparse.Namespace) -> None:
 
 
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(
-        prog="dewey",
-        description="A Dewey-decimal memory librarian for Claude Code.",
-    )
+    parser = argparse.ArgumentParser(prog="dewey", description="A Dewey-decimal memory librarian for Claude Code.")
+    parser.add_argument("--version", action="version", version=f"dewey {__version__}")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("sweep", help="list every memory silo").set_defaults(fn=cmd_sweep)
@@ -70,7 +81,12 @@ def main(argv: list[str] | None = None) -> None:
     doctor.add_argument("root", nargs="?", default=".", help="dir containing git repos")
     doctor.set_defaults(fn=cmd_doctor)
 
-    for name in ("checkout", "checkin", "balance", "sync"):
+    sync = sub.add_parser("sync", help="shelve memory into a Markdown library (secret-aware, dry-run default)")
+    sync.add_argument("--to", required=True, help="target library directory")
+    sync.add_argument("--apply", action="store_true", help="actually write (default: dry-run)")
+    sync.set_defaults(fn=cmd_sync)
+
+    for name in ("checkout", "checkin", "balance"):
         sub.add_parser(name, help=f"[planned] {name}").set_defaults(fn=cmd_planned)
 
     args = parser.parse_args(argv)
