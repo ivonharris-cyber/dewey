@@ -93,6 +93,21 @@ A Claude reads its `memory.md` card, **checks out** the books it needs for conte
 
 ---
 
+## The Reference Desk — the Librarian (planned AI / MCP layer)
+
+The MCP layer gives Dewey a face: a Librarian at the desk you can just *ask*.
+
+```
+You:       "Hi, I'm looking for Ivon's work on eyewear — what can you show me?"
+Librarian: "I have several books: Waka.Ai, Ruby.Ai, and Eyewear-OEM.
+            Would you like to check those out?"
+```
+
+Behind the desk: your natural-language question runs a semantic lookup over the Dewey catalogue
+(call-numbers + shelves + titles), and the Librarian offers to **check out** only the books you
+need — loading those few pointers into the silo Claude reads, then checking them back in when
+you're done. Ask for a topic, get the right few books — not the whole library dumped into context.
+
 ## Companions & roadmap
 
 Dewey (the library) is meant to run with two helpers:
