@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 from . import __version__, core
@@ -97,6 +98,11 @@ def cmd_planned(_: argparse.Namespace) -> None:
 
 
 def main(argv: list[str] | None = None) -> None:
+    for _stream in (sys.stdout, sys.stderr):  # print unicode paths on any console
+        try:
+            _stream.reconfigure(encoding="utf-8")
+        except (AttributeError, ValueError):
+            pass
     parser = argparse.ArgumentParser(prog="dewey", description="A Dewey-decimal memory librarian for Claude Code.")
     parser.add_argument("--version", action="version", version=f"dewey {__version__}")
     sub = parser.add_subparsers(dest="cmd", required=True)
