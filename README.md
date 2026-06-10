@@ -44,6 +44,8 @@ to "fact".
 | `dewey doctor [root]` | available | Scan repositories for committed `.env` files and missing ignore rules (no secret values are read) |
 | `dewey sync --to DIR` | available | Copy memory into a browsable Markdown library; skips credential files; dry-run by default |
 | `dewey balance` | available | Find duplicate entries across silos and replace exact duplicates with a pointer; conflicts are reported, never modified; dry-run by default |
+| `dewey weave --to DIR` | available | Link a synced library into per-class topic clusters and colour each class (000–900) in the Obsidian graph |
+| `dewey micronise --library DIR` | available | Replace shelved silo files with small pointers (content stays in the library); reports the size saved; dry-run by default |
 | `dewey checkout` / `checkin` | planned | Borrow and return entries for context — ships with the MCP layer below |
 
 ## Reference Desk (planned — MCP)
@@ -56,9 +58,12 @@ relevant entries, rather than the whole library:
 
 ## Roadmap
 
-- An MCP server (the Reference Desk above).
-- A scheduled job (cron or an automation tool such as n8n) that runs `dewey balance` on a regular
-  cadence to keep the canonical store current.
+- **Obsidian** — already works at the file level: point `sync` at your vault and the entries appear
+  natively, because Dewey writes plain Markdown. A one-click community plugin is a future convenience.
+- **Notion** — a `sync --to notion` integration that publishes the categorised library to a Notion
+  database, using your own Notion token.
+- **MCP server** — the Reference Desk above, so an assistant can query and check out entries directly.
+- A scheduled job (cron or an automation tool such as n8n) that runs `dewey balance` on a regular cadence.
 - An archive for entries that fall out of use, so nothing is permanently lost.
 
 ## Security

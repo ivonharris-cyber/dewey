@@ -93,6 +93,47 @@ def cmd_balance(args: argparse.Namespace) -> None:
     print(f"recovery log: {log}")
 
 
+def cmd_weave(args: argparse.Namespace) -> None:
+    library = Path(args.to).resolve()
+    if not library.is_dir():
+        print(f"error: {library} is not a library directory (run sync first)")
+        raise SystemExit(2)
+    moc, total, classes = core.weave_library(library)
+    print(f"[ok] woven {total} entries into topic clusters ({moc.name})")
+    vault = core.find_vault(library)
+    if vault:
+        gpath = core.weave_colors(vault, library, classes)
+        coloured = len([c for c in classes if c in core._CLASS_COLORS])
+        print(f"[ok] coloured {coloured} classes (000-900) in {gpath.name}")
+    else:
+        print("(no .obsidian vault found above the library - skipped colouring)")
+    print("Reload Obsidian / reopen Graph View: clusters are linked + coloured by class.")
+
+
+def cmd_micronise(args: argparse.Namespace) -> None:
+    library = Path(args.library).resolve()
+    if not library.is_dir():
+        print(f"error: {library} is not a library directory (run sync first)")
+        raise SystemExit(2)
+    plan = core.plan_micronise(core.discover_silos(), library)
+    if not plan.targets:
+        print("nothing to micronise yet — no silo files have an identical copy in the library (run sync first).")
+        return
+    saved = plan.before_bytes - plan.after_bytes
+    pct = saved / plan.before_bytes * 100 if plan.before_bytes else 0
+    print(f"{len(plan.targets)} shelved entries can shrink to pointers:")
+    print(f"  before: {plan.before_bytes/1024:.0f} KB  ->  after: {plan.after_bytes/1024:.1f} KB   ({pct:.0f}% smaller)")
+    if not args.apply:
+        print("\n(dry-run) add --apply to replace those silo files with pointers. The full content stays in the library.")
+        return
+    log = core.write_micronise_log(plan)
+    done = core.apply_micronise(plan)
+    print(f"\n[ok] micronised {done} entries. recovery log: {log}")
+    print("NOTE: those silo files are now pointer stubs — your assistant reads the pointer, not the")
+    print("      content, until a checkout/restore command exists. Re-run `dewey sync` to rebuild the")
+    print("      library, or restore originals from the recovery log if needed.")
+
+
 def cmd_planned(_: argparse.Namespace) -> None:
     print(_PLANNED)
 
@@ -122,6 +163,15 @@ def main(argv: list[str] | None = None) -> None:
     balance = sub.add_parser("balance", help="find duplicate entries across silos; replace exact duplicates with a pointer (dry-run by default)")
     balance.add_argument("--apply", action="store_true", help="replace byte-identical duplicates with a pointer (conflicts are never modified)")
     balance.set_defaults(fn=cmd_balance)
+
+    weave = sub.add_parser("weave", help="link the synced library into topic clusters + colour each class (Obsidian)")
+    weave.add_argument("--to", required=True, help="the library directory created by sync")
+    weave.set_defaults(fn=cmd_weave)
+
+    micronise = sub.add_parser("micronise", help="shrink shelved silo files to pointers (content stays in the library; dry-run by default)")
+    micronise.add_argument("--library", required=True, help="the library directory created by sync")
+    micronise.add_argument("--apply", action="store_true", help="replace shelved silo files with pointers (re-verified; recovery log written)")
+    micronise.set_defaults(fn=cmd_micronise)
 
     for name in ("checkout", "checkin"):
         sub.add_parser(name, help=f"planned (MCP layer): {name}").set_defaults(fn=cmd_planned)
