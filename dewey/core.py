@@ -298,7 +298,7 @@ def find_duplicates(silos: list[Silo]) -> list[DupGroup]:
     for name, paths in sorted(by_name.items()):
         if len(paths) < 2:
             continue
-        freshest = max(paths, key=lambda p: (p.stat().st_mtime, str(p)))  # deterministic
+        freshest = max(paths, key=lambda p: (p.stat().st_mtime, p.as_posix()))  # deterministic, OS-independent
         fresh_digest = _digest(freshest)
         identical: list[Path] = []
         conflicts: list[Path] = []

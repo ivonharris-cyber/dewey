@@ -6,6 +6,7 @@
 /data/
 .dewey-cache/
 vault-export/
+/promo/
 
 # --- python ---
 __pycache__/
