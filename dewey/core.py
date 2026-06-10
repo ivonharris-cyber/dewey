@@ -1,11 +1,12 @@
 """Core library logic: discover silos, build the dated log, scan repos for leaks,
-and shelve memory into a browsable Markdown library.
+and shelve / de-duplicate memory.
 
 No secret values are ever read or printed — `doctor` checks git-tracking and
 .gitignore coverage only, and `sync` skips credential-named files entirely.
 """
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 import shutil
@@ -21,7 +22,7 @@ _PREFIX_RE = re.compile(r"^(feedback|project|reference|user|session|decision|sou
 _PRUNE_DIRS = {"node_modules", ".git", ".venv", "venv", "__pycache__", "dist", "build", ".next", "target", ".cache"}
 _ENV_EXEMPT = {".env.example", ".env.sample", ".env.template", ".env.dist"}
 _SENSITIVE_RE = re.compile(
-    r"(api[-_]?key|credential|secret|token|password|[-_]login|keystore|\.key$|\.env)",
+    r"(api[-_]?key|credential|secret|token|password|(?:^|[-_])login|keystore|\.key$)",
     re.IGNORECASE,
 )
 
@@ -46,8 +47,16 @@ def is_env_file(name: str) -> bool:
 
 
 def is_sensitive(name: str) -> bool:
-    """True for files whose name suggests they hold credentials — never auto-copied by sync."""
-    return bool(_SENSITIVE_RE.search(name))
+    """True for files whose name suggests credentials — never copied by sync."""
+    return is_env_file(name) or bool(_SENSITIVE_RE.search(name))
+
+
+def portable(path: Path) -> str:
+    """Render a path under ~/.claude as a portable, username-free pointer."""
+    try:
+        return "~/.claude/" + path.relative_to(CLAUDE).as_posix()
+    except ValueError:
+        return str(path)
 
 
 @dataclass
@@ -60,6 +69,11 @@ class Silo:
     files: list[Path] = field(default_factory=list)
 
 
+def _md_files(directory: Path) -> list[Path]:
+    """All *.md in a directory, skipping symlinks (which could point outside the trusted area)."""
+    return sorted(p for p in directory.glob("*.md") if not p.is_symlink())
+
+
 def discover_silos() -> list[Silo]:
     """Find every project and per-agent memory silo under ~/.claude."""
     silos: list[Silo] = []
@@ -68,12 +82,12 @@ def discover_silos() -> list[Silo]:
         for d in sorted(projects.iterdir()):
             mem = d / "memory"
             if mem.is_dir():
-                silos.append(Silo(d.name, mem, "project", sorted(mem.glob("*.md"))))
+                silos.append(Silo(d.name, mem, "project", _md_files(mem)))
     agents = CLAUDE / "agent-memory"
     if agents.is_dir():
         for d in sorted(agents.iterdir()):
             if d.is_dir():
-                silos.append(Silo(d.name, d, "agent", sorted(d.glob("*.md"))))
+                silos.append(Silo(d.name, d, "agent", _md_files(d)))
     return silos
 
 
@@ -94,7 +108,7 @@ class LogRow:
 
 
 def build_log(silos: list[Silo]) -> list[LogRow]:
-    """Captain's Log: every memory file as a dated row, oldest first (UTC)."""
+    """Every memory file as a dated row, oldest first (UTC)."""
     rows = [
         LogRow(
             datetime.fromtimestamp(f.stat().st_mtime, tz=timezone.utc),
@@ -108,11 +122,7 @@ def build_log(silos: list[Silo]) -> list[LogRow]:
 
 
 def _git(repo: Path, *args: str) -> Optional[list[str]]:
-    """Run git; return stdout lines, or None if git is missing or the call failed.
-
-    Returning None (not []) lets callers distinguish "no matches" from "git errored",
-    so a failed call can never be mistaken for a clean result.
-    """
+    """Run git; return stdout lines, or None if git is missing or the call failed."""
     try:
         result = subprocess.run(
             ["git", "-C", str(repo), *args],
@@ -139,7 +149,6 @@ def _gitignore_covers_env(path: Path) -> bool:
 
 
 def _find_env_files(repo: Path) -> list[Path]:
-    """Locate real .env files (skips templates and vendored dirs)."""
     found: list[Path] = []
     for dirpath, dirnames, filenames in os.walk(repo):
         dirnames[:] = [d for d in dirnames if d not in _PRUNE_DIRS]
@@ -154,7 +163,7 @@ def find_git_repos(root: Path) -> list[Path]:
     repos: list[Path] = []
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if d not in _PRUNE_DIRS]
-        if ".git" in dirnames or ".git" in filenames:  # .git is a dir, or a file for worktrees/submodules
+        if ".git" in dirnames or ".git" in filenames:
             repos.append(Path(dirpath))
     return repos
 
@@ -194,7 +203,7 @@ def doctor_env(root: Path) -> list[RepoHealth]:
     return out
 
 
-# --- sync: shelve memory into a browsable Markdown library --------------------
+# --- sync: copy memory into a browsable Markdown library ----------------------
 
 
 @dataclass
@@ -204,7 +213,7 @@ class SyncPlan:
 
 
 def plan_sync(silos: list[Silo], target: Path) -> SyncPlan:
-    """Plan a library mirror: silo files -> target/<class>/<silo>/<file>, skipping secrets."""
+    """Plan a library mirror: files -> target/<class>/<kind>-<silo>/<file>, skipping secrets."""
     target = Path(target)
     copied: list[tuple[Path, Path]] = []
     skipped: list[Path] = []
@@ -215,19 +224,104 @@ def plan_sync(silos: list[Silo], target: Path) -> SyncPlan:
                 continue
             category, _ = categorize(f.stem)
             klass = _CLASS_BY_CATEGORY.get(category, "000-meta")
-            copied.append((f, target / klass / silo.name / f.name))
+            copied.append((f, target / klass / f"{silo.kind}-{silo.name}" / f.name))
     return SyncPlan(copied, skipped)
 
 
-def apply_sync(plan: SyncPlan, target: Path) -> None:
-    """Write the planned library, then an index of what was shelved."""
-    target = Path(target)
+def apply_sync(plan: SyncPlan, target: Path) -> list[Path]:
+    """Write the planned library without clobbering equal/newer copies or escaping `target`."""
+    target = Path(target).resolve()
+    prefix = str(target) + os.sep
+    written: list[Path] = []
     for src, dest in plan.copied:
+        dest = dest.resolve()
+        if dest != target and not str(dest).startswith(prefix):
+            continue  # path-traversal guard: never write outside target
+        if dest.exists() and dest.stat().st_mtime >= src.stat().st_mtime:
+            continue  # don't overwrite an equal-or-newer library copy
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dest)
+        written.append(dest)
     lines = ["# Dewey Library — index", ""]
-    lines += [f"- `{dest.relative_to(target)}`" for _, dest in sorted(plan.copied, key=lambda c: str(c[1]))]
+    lines += [f"- `{d.relative_to(target).as_posix()}`" for d in sorted(written)]
     if plan.skipped_sensitive:
-        lines += ["", "## Skipped (sensitive — never auto-copied)", ""]
+        lines += ["", "## Skipped (sensitive — never copied)", ""]
         lines += [f"- {p.name}" for p in plan.skipped_sensitive]
     (target / "LIBRARY-INDEX.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return written
+
+
+# --- balance: find and heal duplicate entries across silos --------------------
+
+
+@dataclass
+class DupGroup:
+    name: str
+    freshest: Path
+    identical_stale: list[Path]   # byte-identical older copies (safe to replace with a pointer)
+    conflicts: list[Path]         # same name, different content (needs a human)
+
+
+def _digest(path: Path) -> str:
+    """Streaming sha256 so very large files never load fully into memory."""
+    h = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def find_duplicates(silos: list[Silo]) -> list[DupGroup]:
+    """Group files by name across silos; classify older copies as identical or conflicting."""
+    by_name: dict[str, list[Path]] = {}
+    for silo in silos:
+        for f in silo.files:
+            by_name.setdefault(f.name, []).append(f)
+    groups: list[DupGroup] = []
+    for name, paths in sorted(by_name.items()):
+        if len(paths) < 2:
+            continue
+        freshest = max(paths, key=lambda p: (p.stat().st_mtime, str(p)))  # deterministic
+        fresh_digest = _digest(freshest)
+        identical: list[Path] = []
+        conflicts: list[Path] = []
+        for p in paths:
+            if p == freshest:
+                continue
+            (identical if _digest(p) == fresh_digest else conflicts).append(p)
+        groups.append(DupGroup(name, freshest, identical, conflicts))
+    return groups
+
+
+def write_balance_log(dups: list[DupGroup]) -> Path:
+    """Record what `--apply` is about to do, for recovery, before any file is touched."""
+    log = Path.home() / ".dewey-balance-recovery.md"
+    lines = [f"# dewey balance — recovery log ({datetime.now():%Y-%m-%d %H:%M})", ""]
+    for g in dups:
+        for stale in g.identical_stale:
+            lines.append(f"- replaced `{portable(stale)}` -> canonical `{portable(g.freshest)}`")
+    log.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return log
+
+
+def heal_duplicate(group: DupGroup) -> int:
+    """Replace each byte-identical stale copy with a pointer stub.
+
+    Re-verifies content at write time, so an edit made since the scan is never
+    clobbered (closes the TOCTOU window). Conflicts are never touched.
+    """
+    if not group.freshest.exists():
+        return 0
+    fresh_digest = _digest(group.freshest)
+    stub = (
+        "# moved by `dewey balance`\n\n"
+        "This was an exact duplicate. The canonical copy is at:\n\n"
+        f"`{portable(group.freshest)}`\n"
+    )
+    healed = 0
+    for stale in group.identical_stale:
+        if not stale.exists() or _digest(stale) != fresh_digest:
+            continue  # drifted since the scan — leave it alone
+        stale.write_text(stub, encoding="utf-8")
+        healed += 1
+    return healed

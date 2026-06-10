@@ -7,10 +7,9 @@ from pathlib import Path
 from . import __version__, core
 
 _PLANNED = (
-    "Designed, not yet implemented — see the library model in README.md.\n"
-    "  checkout : load Dewey call-numbers into a silo\n"
-    "  checkin  : sync a silo back to the vault, leave pointer stubs\n"
-    "  balance  : self-healing reconcile across all silos + the vault"
+    "Planned — these arrive with the MCP layer.\n"
+    "  checkout : load specific entries into a silo for context\n"
+    "  checkin  : sync a silo back to the library and leave pointers"
 )
 
 
@@ -53,16 +52,44 @@ def cmd_doctor(args: argparse.Namespace) -> None:
 
 def cmd_sync(args: argparse.Namespace) -> None:
     target = Path(args.to).resolve()
+    if str(target).startswith(str(core.CLAUDE.resolve())):
+        print("error: --to must not point inside ~/.claude (it would create a feedback loop)")
+        raise SystemExit(2)
     plan = core.plan_sync(core.discover_silos(), target)
     print(f"Library target: {target}")
-    print(f"  {len(plan.copied)} books to shelve - {len(plan.skipped_sensitive)} skipped (sensitive)")
+    print(f"  {len(plan.copied)} entries to copy - {len(plan.skipped_sensitive)} skipped (sensitive)")
     for p in plan.skipped_sensitive[:15]:
         print(f"    skip (sensitive): {p.name}")
+    if len(plan.skipped_sensitive) > 15:
+        print(f"    ... and {len(plan.skipped_sensitive) - 15} more")
     if not args.apply:
         print("\n(dry-run) add --apply to write the library.")
         return
-    core.apply_sync(plan, target)
-    print(f"\n[ok] Shelved {len(plan.copied)} books into {target}")
+    written = core.apply_sync(plan, target)
+    print(f"\n[ok] Copied {len(written)} entries into {target}")
+
+
+def cmd_balance(args: argparse.Namespace) -> None:
+    groups = core.find_duplicates(core.discover_silos())
+    dups = [g for g in groups if g.identical_stale]
+    conflicts = [g for g in groups if g.conflicts]
+    stale_count = sum(len(g.identical_stale) for g in dups)
+    print(f"{len(groups)} duplicated names - {stale_count} exact stale copies - {len(conflicts)} conflicts\n")
+    for g in dups[:30]:
+        print(f"  dup   {g.name}  ({len(g.identical_stale)} stale copy/ies) -> keep newest")
+    if len(dups) > 30:
+        print(f"  ... and {len(dups) - 30} more duplicate group(s)")
+    for g in conflicts[:30]:
+        print(f"  !!    {g.name}  same name, different content across silos (needs you)")
+    if len(conflicts) > 30:
+        print(f"  ... and {len(conflicts) - 30} more conflict(s)")
+    if not args.apply:
+        print("\n(dry-run) add --apply to replace exact duplicates with a pointer. Conflicts are never touched.")
+        return
+    log = core.write_balance_log(dups)
+    healed = sum(core.heal_duplicate(g) for g in dups)
+    print(f"\n[ok] replaced {healed} exact duplicates with a pointer. {len(conflicts)} conflicts left for you.")
+    print(f"recovery log: {log}")
 
 
 def cmd_planned(_: argparse.Namespace) -> None:
@@ -74,20 +101,24 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--version", action="version", version=f"dewey {__version__}")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
-    sub.add_parser("sweep", help="list every memory silo").set_defaults(fn=cmd_sweep)
-    sub.add_parser("log", help="captain's log: all memory by stardate").set_defaults(fn=cmd_log)
+    sub.add_parser("sweep", help="list all memory silos").set_defaults(fn=cmd_sweep)
+    sub.add_parser("log", help="list every memory entry in date order").set_defaults(fn=cmd_log)
 
-    doctor = sub.add_parser("doctor", help="scan repos for .env leaks + hygiene")
-    doctor.add_argument("root", nargs="?", default=".", help="dir containing git repos")
+    doctor = sub.add_parser("doctor", help="scan repositories for committed .env files")
+    doctor.add_argument("root", nargs="?", default=".", help="directory containing git repositories")
     doctor.set_defaults(fn=cmd_doctor)
 
-    sync = sub.add_parser("sync", help="shelve memory into a Markdown library (secret-aware, dry-run default)")
+    sync = sub.add_parser("sync", help="copy memory into a Markdown library (skips credentials; dry-run by default)")
     sync.add_argument("--to", required=True, help="target library directory")
-    sync.add_argument("--apply", action="store_true", help="actually write (default: dry-run)")
+    sync.add_argument("--apply", action="store_true", help="write the library (default: dry-run)")
     sync.set_defaults(fn=cmd_sync)
 
-    for name in ("checkout", "checkin", "balance"):
-        sub.add_parser(name, help=f"[planned] {name}").set_defaults(fn=cmd_planned)
+    balance = sub.add_parser("balance", help="find duplicate entries across silos; replace exact duplicates with a pointer (dry-run by default)")
+    balance.add_argument("--apply", action="store_true", help="replace byte-identical duplicates with a pointer (conflicts are never modified)")
+    balance.set_defaults(fn=cmd_balance)
+
+    for name in ("checkout", "checkin"):
+        sub.add_parser(name, help=f"planned (MCP layer): {name}").set_defaults(fn=cmd_planned)
 
     args = parser.parse_args(argv)
     args.fn(args)
