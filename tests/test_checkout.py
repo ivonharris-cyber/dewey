@@ -51,6 +51,17 @@ class CheckoutCheckinRoundTrip(unittest.TestCase):
         self.canonical.unlink()  # remove the shelf copy
         self.assertFalse(core.checkin_entry(self.silo_file, self.library))      # refuses rather than guess
 
+    def test_checkout_parses_legacy_stub_without_header(self) -> None:
+        # stubs written before the `# dewey-canonical:` header still resolve via the backtick line
+        legacy = (
+            "# moved by `dewey micronise`\n\n"
+            "The full copy lives in the library:\n\n"
+            f"`{self.canonical}`\n"
+        )
+        self.silo_file.write_text(legacy, encoding="utf-8")
+        self.assertTrue(core.checkout_entry(self.silo_file))
+        self.assertEqual(self.silo_file.read_text(encoding="utf-8"), self.full)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -446,11 +446,19 @@ def _pointer_stub(canonical: Path) -> str:
 
 
 def _canonical_from_stub(text: str) -> Optional[Path]:
-    """Read the library path back out of a pointer stub (the machine-readable header line)."""
+    """Read the library path back out of a pointer stub.
+
+    Prefers the machine-readable `# dewey-canonical:` header; falls back to the
+    backtick-quoted path line that older stubs (written before the header) used.
+    """
+    fallback: Optional[Path] = None
     for line in text.splitlines():
         if line.startswith("# dewey-canonical:"):
             return Path(line.split(":", 1)[1].strip()).expanduser()
-    return None
+        stripped = line.strip()
+        if fallback is None and len(stripped) > 2 and stripped.startswith("`") and stripped.endswith("`"):
+            fallback = Path(stripped[1:-1].strip()).expanduser()
+    return fallback
 
 
 def plan_micronise(silos: list[Silo], library: Path) -> MicroPlan:
