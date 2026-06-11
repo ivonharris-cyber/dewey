@@ -66,3 +66,20 @@ $ dewey sync --to ~/dewey-library --apply  # writes the library + an index
 `sync` is **secret-aware** (skips anything named like a credential) and **dry-run by default** —
 it never moves or deletes your originals; it copies into the library you point it at.
 Point Obsidian at that folder, or import it into Notion, to read every book.
+
+## Shrink, then borrow back (v0.2)
+
+Once a library exists, cluster it, shrink the silos to pointers, and pull any entry
+back on demand:
+
+```bash
+dewey weave --to ~/dewey-library                  # cluster + colour the library (Obsidian)
+dewey micronise --library ~/dewey-library         # dry-run — shows the size saved
+dewey micronise --library ~/dewey-library --apply # replace silo files with pointers
+
+dewey checkout project_foo.md                          # restore one entry to full content
+dewey checkin  project_foo.md --library ~/dewey-library # sync edits back, then re-shrink
+```
+
+`MEMORY.md` (the index your assistant loads each session) is **never** shrunk. Every
+`--apply` writes a recovery log, and `checkout` is the clean reverse of `micronise`.

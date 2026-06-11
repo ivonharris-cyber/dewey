@@ -82,6 +82,10 @@ dewey --version
 dewey sweep
 ```
 
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md). Latest: **0.2.0** — `checkout`/`checkin` make shrinking reversible, plus atomic writes and `MEMORY.md` protection.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
