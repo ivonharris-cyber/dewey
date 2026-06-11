@@ -28,7 +28,10 @@ _SENSITIVE_RE = re.compile(
 )
 _WEAVE_SKIP = {"LIBRARY-INDEX.md"}
 _STUB_MARKER = "# moved by `dewey"
-_MICRONISE_SKIP = {"MEMORY.md"}  # the live index Claude Code loads each launch — never shrink it to a pointer
+# Names Claude Code auto-loads on every launch — never replace these with a pointer stub.
+# Compared case-insensitively (Windows/macOS filesystems are case-insensitive). CLAUDE.md is
+# also auto-loaded but lives outside silos; MEMORY.md is the in-silo session index.
+_NEVER_STUB = {"memory.md"}
 
 _CLASS_BY_CATEGORY = {
     "feedback": "100-people",
@@ -75,6 +78,13 @@ def _homeify(path: Path) -> str:
     home = str(Path.home())
     s = str(path)
     return "~" + s[len(home):] if s.startswith(home) else s
+
+
+def _atomic_write(path: Path, text: str) -> None:
+    """Write via a temp file + atomic os.replace, so a crash never leaves a truncated/empty file."""
+    tmp = path.with_name(path.name + ".dewey-tmp")
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(tmp, path)
 
 
 @dataclass
@@ -326,6 +336,7 @@ def heal_duplicate(group: DupGroup) -> int:
     """Replace each byte-identical stale copy with a pointer stub (re-verified; conflicts untouched)."""
     if not group.freshest.exists():
         return 0
+    bound = str(CLAUDE.resolve()) + os.sep
     fresh_digest = _digest(group.freshest)
     stub = (
         "# moved by `dewey balance`\n\n"
@@ -334,9 +345,13 @@ def heal_duplicate(group: DupGroup) -> int:
     )
     healed = 0
     for stale in group.identical_stale:
+        if stale.name.lower() in _NEVER_STUB:
+            continue  # never stub a file the assistant auto-loads
+        if stale.is_symlink() or not str(stale.resolve()).startswith(bound):
+            continue  # only ever write a real file inside ~/.claude
         if not stale.exists() or _digest(stale) != fresh_digest:
             continue  # drifted since the scan — leave it alone
-        stale.write_text(stub, encoding="utf-8")
+        _atomic_write(stale, stub)
         healed += 1
     return healed
 
@@ -440,7 +455,7 @@ def plan_micronise(silos: list[Silo], library: Path) -> MicroPlan:
     before = after = 0
     for silo in silos:
         for f in silo.files:
-            if f.name in _MICRONISE_SKIP:
+            if f.name.lower() in _NEVER_STUB:
                 continue  # never pointer-ize the live session index (MEMORY.md)
             cands = lib.get(f.name, [])
             if not cands:
@@ -473,12 +488,14 @@ def apply_micronise(plan: MicroPlan) -> int:
     bound = str(CLAUDE.resolve()) + os.sep
     done = 0
     for silo_file, lib_copy in plan.targets:
-        if not str(silo_file.resolve()).startswith(bound):
-            continue  # safety: only ever write inside ~/.claude
+        if silo_file.name.lower() in _NEVER_STUB:
+            continue  # defense-in-depth: never stub the live index even if it was planned
+        if silo_file.is_symlink() or not str(silo_file.resolve()).startswith(bound):
+            continue  # safety: only ever write a real file inside ~/.claude
         if not silo_file.exists() or not lib_copy.exists():
             continue
         if _digest(silo_file) != _digest(lib_copy):
             continue  # drifted since the scan — skip
-        silo_file.write_text(_pointer_stub(lib_copy), encoding="utf-8")
+        _atomic_write(silo_file, _pointer_stub(lib_copy))
         done += 1
     return done
