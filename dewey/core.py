@@ -436,11 +436,21 @@ class MicroPlan:
 
 
 def _pointer_stub(canonical: Path) -> str:
+    home = _homeify(canonical)
     return (
-        "# moved by `dewey micronise`\n\n"
+        "# moved by `dewey micronise`\n"
+        f"# dewey-canonical: {home}\n\n"
         "The full copy lives in the library:\n\n"
-        f"`{_homeify(canonical)}`\n"
+        f"`{home}`\n"
     )
+
+
+def _canonical_from_stub(text: str) -> Optional[Path]:
+    """Read the library path back out of a pointer stub (the machine-readable header line)."""
+    for line in text.splitlines():
+        if line.startswith("# dewey-canonical:"):
+            return Path(line.split(":", 1)[1].strip()).expanduser()
+    return None
 
 
 def plan_micronise(silos: list[Silo], library: Path) -> MicroPlan:
@@ -499,3 +509,46 @@ def apply_micronise(plan: MicroPlan) -> int:
         _atomic_write(silo_file, _pointer_stub(lib_copy))
         done += 1
     return done
+
+
+# --- checkout / checkin: borrow a shrunk entry back, then return it -----------
+
+
+def checkout_entry(silo_file: Path) -> bool:
+    """Restore a pointer stub to its full library content so the assistant can read it again."""
+    bound = str(CLAUDE.resolve()) + os.sep
+    if silo_file.is_symlink() or not str(silo_file.resolve()).startswith(bound):
+        return False
+    if not silo_file.is_file():
+        return False
+    text = silo_file.read_text(encoding="utf-8", errors="ignore")
+    if not text.startswith(_STUB_MARKER):
+        return False  # not a pointer — nothing to check out
+    canonical = _canonical_from_stub(text)
+    if canonical is None or not canonical.is_file():
+        return False
+    _atomic_write(silo_file, canonical.read_text(encoding="utf-8"))
+    return True
+
+
+def checkin_entry(silo_file: Path, library: Path) -> bool:
+    """Sync a checked-out entry's edits back to the library, then re-shrink it to a pointer."""
+    bound = str(CLAUDE.resolve()) + os.sep
+    if silo_file.is_symlink() or not str(silo_file.resolve()).startswith(bound):
+        return False
+    if not silo_file.is_file() or silo_file.name.lower() in _NEVER_STUB:
+        return False
+    text = silo_file.read_text(encoding="utf-8", errors="ignore")
+    if text.startswith(_STUB_MARKER):
+        return False  # still a pointer — nothing checked out to check in
+    matches = sorted(
+        p for p in Path(library).rglob(silo_file.name)
+        if p.is_file() and not p.name.startswith("_")
+    )
+    if not matches:
+        return False  # no library home — refuse rather than guess
+    canonical = matches[0]
+    if _digest(silo_file) != _digest(canonical):
+        _atomic_write(canonical, text)  # carry the edits back to the shelf first
+    _atomic_write(silo_file, _pointer_stub(canonical))
+    return True

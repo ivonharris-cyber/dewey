@@ -7,11 +7,12 @@ from pathlib import Path
 
 from . import __version__, core
 
-_PLANNED = (
-    "Planned — these arrive with the MCP layer.\n"
-    "  checkout : load specific entries into a silo for context\n"
-    "  checkin  : sync a silo back to the library and leave pointers"
-)
+def _selected(silos, name, want_all):
+    """Yield (silo, file) pairs matching a filename, or every file with --all."""
+    for s in silos:
+        for f in s.files:
+            if want_all or f.name == name:
+                yield s, f
 
 
 def cmd_sweep(_: argparse.Namespace) -> None:
@@ -134,8 +135,32 @@ def cmd_micronise(args: argparse.Namespace) -> None:
     print("      library, or restore originals from the recovery log if needed.")
 
 
-def cmd_planned(_: argparse.Namespace) -> None:
-    print(_PLANNED)
+def cmd_checkout(args: argparse.Namespace) -> None:
+    if not args.all and not args.name:
+        print("error: name an entry (e.g. project_foo.md) or pass --all")
+        raise SystemExit(2)
+    done = 0
+    for s, f in _selected(core.discover_silos(), args.name, args.all):
+        if core.checkout_entry(f):
+            print(f"  checked out  {f.name}  ({s.name})")
+            done += 1
+    print(f"\n[ok] checked out {done} entr{'y' if done == 1 else 'ies'} — full content restored.")
+
+
+def cmd_checkin(args: argparse.Namespace) -> None:
+    if not args.all and not args.name:
+        print("error: name an entry (e.g. project_foo.md) or pass --all")
+        raise SystemExit(2)
+    library = Path(args.library).resolve()
+    if not library.is_dir():
+        print(f"error: {library} is not a library directory (run sync first)")
+        raise SystemExit(2)
+    done = 0
+    for s, f in _selected(core.discover_silos(), args.name, args.all):
+        if core.checkin_entry(f, library):
+            print(f"  checked in   {f.name}  ({s.name})")
+            done += 1
+    print(f"\n[ok] checked in {done} entr{'y' if done == 1 else 'ies'} — edits synced, re-shrunk to pointers.")
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -173,8 +198,16 @@ def main(argv: list[str] | None = None) -> None:
     micronise.add_argument("--apply", action="store_true", help="replace shelved silo files with pointers (re-verified; recovery log written)")
     micronise.set_defaults(fn=cmd_micronise)
 
-    for name in ("checkout", "checkin"):
-        sub.add_parser(name, help=f"planned (MCP layer): {name}").set_defaults(fn=cmd_planned)
+    checkout = sub.add_parser("checkout", help="restore a shrunk entry to full content (so the assistant can read it)")
+    checkout.add_argument("name", nargs="?", help="entry filename, e.g. project_foo.md (omit with --all)")
+    checkout.add_argument("--all", action="store_true", help="check out every pointer stub")
+    checkout.set_defaults(fn=cmd_checkout)
+
+    checkin = sub.add_parser("checkin", help="sync a checked-out entry back to the library and re-shrink it")
+    checkin.add_argument("name", nargs="?", help="entry filename (omit with --all)")
+    checkin.add_argument("--all", action="store_true", help="check in every full (non-pointer) entry")
+    checkin.add_argument("--library", required=True, help="the library directory created by sync")
+    checkin.set_defaults(fn=cmd_checkin)
 
     args = parser.parse_args(argv)
     args.fn(args)

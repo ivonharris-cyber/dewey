@@ -45,7 +45,8 @@ in a Dewey-style `000`–`900` range. When a proposal ships, it is re-filed from
 | `dewey balance` | available | Replace exact-duplicate entries with a pointer; conflicts are reported, never modified; dry-run by default |
 | `dewey weave --to DIR` | available | Link a library into per-class topic clusters and colour each class in the Obsidian graph |
 | `dewey micronise --library DIR` | available | Replace shelved silo files with pointers (content stays in the library); reports the size saved; dry-run by default |
-| `dewey checkout` / `checkin` | planned | Borrow and return entries for context — ships with the MCP layer |
+| `dewey checkout NAME` / `--all` | available | Restore a shrunk entry to full content so the assistant can read it |
+| `dewey checkin NAME --library DIR` / `--all` | available | Sync a checked-out entry's edits back to the library and re-shrink it to a pointer |
 
 > **`micronise` never shrinks `MEMORY.md`** — it's the index your assistant loads on every launch, so it always stays whole. For every other entry the full copy lives in the library, and `--apply` writes a recovery log you can restore from.
 
