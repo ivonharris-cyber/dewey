@@ -28,6 +28,7 @@ _SENSITIVE_RE = re.compile(
 )
 _WEAVE_SKIP = {"LIBRARY-INDEX.md"}
 _STUB_MARKER = "# moved by `dewey"
+_MICRONISE_SKIP = {"MEMORY.md"}  # the live index Claude Code loads each launch — never shrink it to a pointer
 
 _CLASS_BY_CATEGORY = {
     "feedback": "100-people",
@@ -439,6 +440,8 @@ def plan_micronise(silos: list[Silo], library: Path) -> MicroPlan:
     before = after = 0
     for silo in silos:
         for f in silo.files:
+            if f.name in _MICRONISE_SKIP:
+                continue  # never pointer-ize the live session index (MEMORY.md)
             cands = lib.get(f.name, [])
             if not cands:
                 continue

@@ -47,6 +47,8 @@ in a Dewey-style `000`–`900` range. When a proposal ships, it is re-filed from
 | `dewey micronise --library DIR` | available | Replace shelved silo files with pointers (content stays in the library); reports the size saved; dry-run by default |
 | `dewey checkout` / `checkin` | planned | Borrow and return entries for context — ships with the MCP layer |
 
+> **`micronise` never shrinks `MEMORY.md`** — it's the index your assistant loads on every launch, so it always stays whole. For every other entry the full copy lives in the library, and `--apply` writes a recovery log you can restore from.
+
 ## Reference Desk (planned — MCP)
 
 An MCP server will let the assistant query the catalogue in natural language and load only the relevant
