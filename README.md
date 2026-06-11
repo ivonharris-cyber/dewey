@@ -50,19 +50,29 @@ in a Dewey-style `000`–`900` range. When a proposal ships, it is re-filed from
 
 > **`micronise` never shrinks `MEMORY.md`** — it's the index your assistant loads on every launch, so it always stays whole. For every other entry the full copy lives in the library, and `--apply` writes a recovery log you can restore from.
 
-## Reference Desk (planned — MCP)
+## Reference Desk (MCP)
 
-An MCP server will let the assistant query the catalogue in natural language and load only the relevant
+A local MCP server — `dewey-mcp` — lets the assistant query the catalogue and load only the relevant
 entries, rather than the whole library:
 
 > **Query:** "What do we have on authentication?"
 > **Reply:** "Three entries — the login service, the token store, and the OAuth migration. Load them?"
 
+Install the extra and point it at your library:
+
+```bash
+pip install dewey[mcp]
+DEWEY_LIBRARY=~/dewey-library dewey-mcp
+```
+
+Tools: `search`, `read_entry`, `catalogue`, `checkout`, `checkin`. The core stays
+dependency-free — only this server needs `mcp`.
+
 ## Roadmap
 
 - **Obsidian** — works today: point `sync` at your vault and entries appear natively (plain Markdown), then `weave` clusters and colours them.
 - **Notion** — a `sync --to notion` integration, using your own token.
-- **MCP server** — the Reference Desk above (`checkout` / `checkin`).
+- **MCP server** — ✅ shipped in 0.3.0 (`dewey-mcp`, the Reference Desk above).
 - **A measured token benchmark** — the same task on raw vs. Dewey-pointered memory, comparing real context-window tokens, retrieval accuracy, and cost.
 - Scheduled `balance` (cron / n8n) and an archive for entries that fall out of use.
 

@@ -1,6 +1,6 @@
 [project]
 name = "dewey"
-version = "0.2.0"
+version = "0.3.0"
 description = "A Dewey-decimal memory librarian for Claude Code — map, date, and de-duplicate stray .md memory silos."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -8,8 +8,12 @@ authors = [{ name = "Ivon Harris" }]
 license = { text = "MIT" }
 dependencies = []
 
+[project.optional-dependencies]
+mcp = ["mcp>=1.2"]
+
 [project.scripts]
 dewey = "dewey.cli:main"
+dewey-mcp = "dewey.mcp_server:main"
 
 [build-system]
 requires = ["setuptools>=61"]

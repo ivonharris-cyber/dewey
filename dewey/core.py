@@ -560,3 +560,68 @@ def checkin_entry(silo_file: Path, library: Path) -> bool:
         _atomic_write(canonical, text)  # carry the edits back to the shelf first
     _atomic_write(silo_file, _pointer_stub(canonical))
     return True
+
+
+# --- reference desk: search the library + read entries (powers the MCP) -------
+
+
+@dataclass
+class Entry:
+    name: str
+    summary: str
+    path: Path
+    klass: str
+
+
+def _summary(text: str) -> str:
+    """One-line gist: the frontmatter `description:`, else the first real body line."""
+    in_fm = False
+    body_first = ""
+    for i, line in enumerate(text.splitlines()):
+        s = line.strip()
+        if i == 0 and s == "---":
+            in_fm = True
+            continue
+        if in_fm:
+            if s == "---":
+                in_fm = False
+            elif s.lower().startswith("description:"):
+                return s.split(":", 1)[1].strip().strip('"').strip()
+            continue
+        if s and not s.startswith("#") and not body_first:
+            body_first = s
+    return body_first
+
+
+def library_entries(library: Path) -> list[Entry]:
+    """Every shelved entry in the library (skips hub/index files), with a one-line summary."""
+    library = Path(library)
+    out: list[Entry] = []
+    for p in sorted(library.rglob("*.md")):
+        if p.name.startswith("_") or p.name in _WEAVE_SKIP:
+            continue
+        rel = p.relative_to(library)
+        klass = rel.parts[0] if len(rel.parts) > 1 else "000-meta"
+        try:
+            text = p.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        out.append(Entry(p.name, _summary(text), p, klass))
+    return out
+
+
+def search_library(library: Path, query: str) -> list[Entry]:
+    """Case-insensitive AND-of-terms match over each entry's name, summary, and class."""
+    q = query.lower().split()
+    entries = library_entries(library)
+    if not q:
+        return entries
+    return [e for e in entries if all(t in f"{e.name}\n{e.summary}\n{e.klass}".lower() for t in q)]
+
+
+def read_library_entry(library: Path, name: str) -> Optional[str]:
+    """Full text of a library entry by filename (first match); None if absent."""
+    for e in library_entries(library):
+        if e.name == name or e.name == f"{name}.md":
+            return e.path.read_text(encoding="utf-8", errors="ignore")
+    return None

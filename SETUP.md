@@ -83,3 +83,19 @@ dewey checkin  project_foo.md --library ~/dewey-library # sync edits back, then 
 
 `MEMORY.md` (the index your assistant loads each session) is **never** shrunk. Every
 `--apply` writes a recovery log, and `checkout` is the clean reverse of `micronise`.
+
+## Reference Desk MCP (optional, v0.3)
+
+Let an assistant query the library natively instead of loading everything:
+
+```bash
+pip install "dewey[mcp]"
+```
+
+Register it with Claude Code (user scope), pointing it at your library:
+
+```bash
+claude mcp add -s user dewey --env DEWEY_LIBRARY="<your library dir>" -- dewey-mcp
+```
+
+Then reload Claude. Tools: `search`, `read_entry`, `catalogue`, `checkout`, `checkin`.

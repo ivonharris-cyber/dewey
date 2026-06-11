@@ -2,6 +2,20 @@
 
 All notable changes to Dewey are documented here. This project follows [Semantic Versioning](https://semver.org).
 
+## [0.3.0] — 2026-06-11
+
+The Reference Desk goes live as a **local MCP server**.
+
+### Added
+- **`dewey-mcp`** — a local [MCP](https://modelcontextprotocol.io) server over a synced library, so an assistant can query memory natively instead of loading the whole thing. Tools: `search`, `read_entry`, `catalogue`, `checkout`, `checkin`.
+- Reference-desk logic in the dependency-free core (`library_entries`, `search_library`, `read_library_entry`) — 3 more tests (11 total).
+- Optional install extra `pip install dewey[mcp]`. The core stays **zero-dependency**; only the server needs `mcp`.
+
+### Usage
+```bash
+DEWEY_LIBRARY=~/dewey-library dewey-mcp
+```
+
 ## [0.2.0] — 2026-06-11
 
 The release that makes shrinking **reversible** — and hardens the destructive paths.
