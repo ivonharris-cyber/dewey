@@ -73,7 +73,7 @@ dependency-free — only this server needs `mcp`.
 - **Obsidian** — works today: point `sync` at your vault and entries appear natively (plain Markdown), then `weave` clusters and colours them.
 - **Notion** — a `sync --to notion` integration, using your own token.
 - **MCP server** — ✅ shipped in 0.3.0 (`dewey-mcp`, the Reference Desk above).
-- **A measured token benchmark** — the same task on raw vs. Dewey-pointered memory, comparing real context-window tokens, retrieval accuracy, and cost.
+- **A measured token benchmark** — ✅ first run in [docs/BENCHMARK.md](docs/BENCHMARK.md): a 2.94 MB / ~770K-token estate (3.9× over a 200K window) answered one real question from ~800 tokens of index — ~960× lighter, lossless.
 - Scheduled `balance` (cron / n8n) and an archive for entries that fall out of use.
 
 ## Security
