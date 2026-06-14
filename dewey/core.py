@@ -32,6 +32,9 @@ _STUB_MARKER = "# moved by `dewey"
 # Compared case-insensitively (Windows/macOS filesystems are case-insensitive). CLAUDE.md is
 # also auto-loaded but lives outside silos; MEMORY.md is the in-silo session index.
 _NEVER_STUB = {"memory.md"}
+# Per-silo / per-agent identity files: the same filename across silos is BY DESIGN
+# (each agent's soul, each silo's index), never a cross-silo duplicate to merge.
+_NEVER_MERGE = {"memory.md", "soul.md"}
 
 _CLASS_BY_CATEGORY = {
     "feedback": "100-people",
@@ -625,3 +628,202 @@ def read_library_entry(library: Path, name: str) -> Optional[str]:
         if e.name == name or e.name == f"{name}.md":
             return e.path.read_text(encoding="utf-8", errors="ignore")
     return None
+
+
+# --- merge: consolidate duplicate-named entries across silos to one canonical -
+
+
+@dataclass
+class MergeGroup:
+    name: str
+    canonical: Path            # the copy we keep — largest, then newest
+    redundant: list[Path]      # byte-identical extra copies (safe to retire)
+    conflicts: list[Path]      # same name, different content (retired too, but flagged)
+
+
+def find_name_duplicates(silos: list[Silo]) -> list[MergeGroup]:
+    """Group entries that share a filename across silos; canonical = largest, then newest, then path."""
+    by_name: dict[str, list[Path]] = {}
+    for silo in silos:
+        for f in silo.files:
+            if f.name.lower() in _NEVER_MERGE or is_sensitive(f.name):
+                continue  # never merge per-silo/agent identity files (MEMORY.md, soul.md) or credentials
+            by_name.setdefault(f.name, []).append(f)
+    groups: list[MergeGroup] = []
+    for name, paths in sorted(by_name.items()):
+        if len(paths) < 2:
+            continue
+        canonical = max(paths, key=lambda p: (p.stat().st_size, p.stat().st_mtime, p.as_posix()))
+        cdig = _digest(canonical)
+        redundant: list[Path] = []
+        conflicts: list[Path] = []
+        for p in paths:
+            if p == canonical:
+                continue
+            (redundant if _digest(p) == cdig else conflicts).append(p)
+        groups.append(MergeGroup(name, canonical, redundant, conflicts))
+    return groups
+
+
+def merge_archive_dir() -> Path:
+    """Timestamped retirement folder under ~/.claude (outside every silo, so it is never re-scanned)."""
+    return CLAUDE / "_dewey-retired" / datetime.now().strftime("%Y%m%d-%H%M%S")
+
+
+def write_merge_log(groups: list[MergeGroup], archive: Path) -> Path:
+    """Record what --apply will retire, before any file moves (recovery)."""
+    log = Path.home() / ".dewey-merge-recovery.md"
+    lines = [f"# dewey merge - recovery log ({datetime.now():%Y-%m-%d %H:%M})", "",
+             f"archive: {_homeify(archive)}", ""]
+    for g in groups:
+        lines.append(f"- **{g.name}** keep canonical `{portable(g.canonical)}`")
+        for r in g.redundant:
+            lines.append(f"    - retired (identical): `{portable(r)}`")
+        for c in g.conflicts:
+            lines.append(f"    - flagged (CONFLICT - different content, NOT moved): `{portable(c)}`")
+    log.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return log
+
+
+def apply_merge(groups: list[MergeGroup], archive: Path) -> int:
+    """Move every non-canonical copy into the archive (never delete); re-checked, stays inside ~/.claude."""
+    bound = str(CLAUDE.resolve()) + os.sep
+    archive = Path(archive)
+    moved = 0
+    for g in groups:
+        for p in g.redundant:  # only byte-identical extras are retired; conflicts are flagged, never moved
+            if p.is_symlink() or not str(p.resolve()).startswith(bound):
+                continue  # only ever move a real file from inside ~/.claude
+            if not p.is_file():
+                continue
+            try:
+                rel = p.resolve().relative_to(CLAUDE.resolve())
+            except ValueError:
+                rel = Path(p.name)
+            dest = archive / rel
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            if dest.exists():
+                dest = dest.with_name(f"{dest.stem}-{_digest(p)[:8]}{dest.suffix}")
+            shutil.move(str(p), str(dest))
+            moved += 1
+    return moved
+
+
+# --- scrub: redact secret VALUES from notes (the .env stays the single source) -
+
+_SECRET_RES = [
+    re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----.*?-----END [A-Z0-9 ]*PRIVATE KEY-----", re.DOTALL),
+    re.compile(r"\bAIza[0-9A-Za-z_\-]{35}\b"),
+    re.compile(r"\bAQ\.[A-Za-z0-9_\-]{18,}\b"),
+    re.compile(r"\bsk-(?:proj-)?[A-Za-z0-9_\-]{20,}\b"),
+    re.compile(r"\bxox[baprs]-[0-9A-Za-z-]{10,}\b"),
+    re.compile(r"\b[0-9]{8,10}:[A-Za-z0-9_\-]{30,}\b"),       # telegram bot token
+    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
+    re.compile(r"\bghp_[A-Za-z0-9]{36}\b"),
+    re.compile(r"\bgithub_pat_[A-Za-z0-9_]{40,}\b"),
+    re.compile(r"\b(?:gsk|glpat)[-_][A-Za-z0-9_\-]{20,}\b"),
+]
+_SECRET_KV_RE = re.compile(
+    r"(?im)^(?P<key>\s*[-*>\s]*\"?[\w.\- ]*?(?:password|passwd|pwd|secret|api[_-]?key|access[_-]?key|client[_-]?secret|token|auth[_-]?token|bearer|credential)s?[\w.\-]*\"?\s*[:=]\s*)(?P<val>\S[^\r\n]*)$"
+)
+_REDACTION = "[redacted -> .env]"
+
+
+def scrub_text(text: str, extra: Optional[list[str]] = None) -> tuple[str, int]:
+    """Replace high-confidence secret values with a marker; returns (new_text, redaction_count)."""
+    n = 0
+    for rx in _SECRET_RES:
+        text, c = rx.subn(_REDACTION, text)
+        n += c
+    n += sum(1 for m in _SECRET_KV_RE.finditer(text) if _REDACTION not in m.group("val"))
+    text = _SECRET_KV_RE.sub(lambda m: m.group(0) if _REDACTION in m.group("val") else m.group("key") + _REDACTION, text)
+    for lit in (extra or []):
+        if lit and lit in text and lit != _REDACTION:
+            n += text.count(lit)
+            text = text.replace(lit, _REDACTION)
+    return text, n
+
+
+def scan_secret_notes(silos: list[Silo], extra: Optional[list[str]] = None) -> list[tuple[Path, int]]:
+    """Find notes that contain secret-like values, with a redaction count each."""
+    out: list[tuple[Path, int]] = []
+    for silo in silos:
+        for f in silo.files:
+            try:
+                _, n = scrub_text(f.read_text(encoding="utf-8", errors="ignore"), extra)
+            except OSError:
+                continue
+            if n:
+                out.append((f, n))
+    return out
+
+
+def apply_scrub(silos: list[Silo], extra: Optional[list[str]] = None) -> int:
+    """Redact secret values in place (atomic, inside ~/.claude only); returns notes changed."""
+    bound = str(CLAUDE.resolve()) + os.sep
+    changed = 0
+    for silo in silos:
+        for f in silo.files:
+            if f.is_symlink() or not str(f.resolve()).startswith(bound):
+                continue
+            try:
+                old = f.read_text(encoding="utf-8", errors="ignore")
+            except OSError:
+                continue
+            new, n = scrub_text(old, extra)
+            if n and new != old:
+                _atomic_write(f, new)
+                changed += 1
+    return changed
+
+
+# --- consolidate: stitch notes into one scrubbed Markdown per major artery ----
+
+
+def artery_key(stem: str) -> str:
+    """Derive a coarse artery (major topic) from a filename stem: drop the category prefix,
+    take the first non-numeric token. e.g. 'project_manametamaori-blog' -> 'manametamaori'."""
+    rest = _PREFIX_RE.sub("", stem).strip(" -_")
+    toks = [t for t in re.split(r"[-_]+", rest.lower()) if t and not t.isdigit()]
+    return toks[0] if toks else "misc"
+
+
+def plan_consolidate(silos: list[Silo], min_notes: int = 2) -> dict:
+    """Group notes into arteries by topic; groups smaller than min_notes fold into '_misc'."""
+    raw: dict = {}
+    for silo in silos:
+        for f in silo.files:
+            if f.name.lower() in _NEVER_MERGE or is_sensitive(f.name):
+                continue
+            raw.setdefault(artery_key(f.stem), []).append(f)
+    arteries: dict = {}
+    for key, files in raw.items():
+        arteries.setdefault(key if len(files) >= min_notes else "_misc", []).extend(files)
+    for files in arteries.values():
+        files.sort(key=lambda p: p.as_posix())
+    return arteries
+
+
+def write_arteries(arteries: dict, target: Path, extra=None) -> list:
+    """Write one secret-scrubbed Markdown per artery: each member note under its own header."""
+    target = Path(target).resolve()
+    bound = str(target) + os.sep
+    written = []
+    for key, files in sorted(arteries.items()):
+        dest = (target / f"{key}.md").resolve()
+        if dest != target and not str(dest).startswith(bound):
+            continue  # path-traversal guard
+        lines = [f"# {key}", "",
+                 f"> Consolidated artery — {len(files)} notes. Auto-built by `dewey consolidate`; secrets scrubbed.", ""]
+        for f in files:
+            try:
+                body, _ = scrub_text(f.read_text(encoding="utf-8", errors="ignore"), extra)
+            except OSError:
+                continue
+            _, title = categorize(f.stem)
+            lines += [f"## {title or f.stem}", "", f"<sub>source: `{portable(f)}`</sub>", "",
+                      body.strip(), "", "---", ""]
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        _atomic_write(dest, "\n".join(lines) + "\n")
+        written.append(dest)
+    return written

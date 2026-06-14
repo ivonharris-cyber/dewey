@@ -163,6 +163,70 @@ def cmd_checkin(args: argparse.Namespace) -> None:
     print(f"\n[ok] checked in {done} entr{'y' if done == 1 else 'ies'} — edits synced, re-shrunk to pointers.")
 
 
+def cmd_scrub(args: argparse.Namespace) -> None:
+    extra = [x for x in (args.also or "").split(",") if x]
+    silos = core.discover_silos()
+    hits = core.scan_secret_notes(silos, extra)
+    total = sum(n for _, n in hits)
+    print(f"{len(hits)} note(s) contain secret-like values - {total} redaction(s)\n")
+    for f, n in hits[:60]:
+        print(f"  {n:>3}x  {core.portable(f)}")
+    if len(hits) > 60:
+        print(f"  ... and {len(hits) - 60} more")
+    if not args.apply:
+        print("\n(dry-run) add --apply to replace those values with '[redacted -> .env]' in place. Your .env is never touched.")
+        return
+    changed = core.apply_scrub(silos, extra)
+    print(f"\n[ok] scrubbed {changed} note(s). Secret values now live only in your .env.")
+
+
+def cmd_consolidate(args: argparse.Namespace) -> None:
+    target = Path(args.to).resolve()
+    if str(target).startswith(str(core.CLAUDE.resolve())):
+        print("error: --to must not be inside ~/.claude")
+        raise SystemExit(2)
+    extra = [x for x in (args.also or "").split(",") if x]
+    arteries = core.plan_consolidate(core.discover_silos(), args.min)
+    notes = sum(len(v) for v in arteries.values())
+    print(f"{len(arteries)} arteries from {notes} notes:\n")
+    for k, files in sorted(arteries.items(), key=lambda kv: (-len(kv[1]), kv[0]))[:40]:
+        print(f"  {len(files):>3}  {k}")
+    if len(arteries) > 40:
+        print(f"  ... and {len(arteries) - 40} more")
+    if not args.apply:
+        print("\n(dry-run) add --apply to write one scrubbed MD per artery into the target dir.")
+        return
+    written = core.write_arteries(arteries, target, extra)
+    print(f"\n[ok] wrote {len(written)} artery files to {target} (secrets scrubbed inline).")
+
+
+def cmd_merge(args: argparse.Namespace) -> None:
+    groups = core.find_name_duplicates(core.discover_silos())
+    if not groups:
+        print("no duplicate-named entries across silos - nothing to merge.")
+        return
+    red = sum(len(g.redundant) for g in groups)
+    con = sum(len(g.conflicts) for g in groups)
+    print(f"{len(groups)} duplicated name(s) across silos - {red} identical extra(s) to archive, {con} conflict(s) to flag\n")
+    for g in groups[:40]:
+        print(f"  {g.name}  -> keep {core.portable(g.canonical)}")
+        for r in g.redundant:
+            print(f"      identical (archive): {core.portable(r)}")
+        for c in g.conflicts:
+            print(f"      CONFLICT  (flag)   : {core.portable(c)}")
+    if len(groups) > 40:
+        print(f"  ... and {len(groups) - 40} more")
+    if not args.apply:
+        print("\n(dry-run) --apply archives the identical extras to ~/.claude/_dewey-retired (nothing deleted).")
+        print("Conflicts (different content, e.g. per-agent notes) are only flagged, never moved - you resolve those.")
+        return
+    archive = core.merge_archive_dir()
+    log = core.write_merge_log(groups, archive)
+    moved = core.apply_merge(groups, archive)
+    print(f"\n[ok] archived {moved} identical duplicate(s) to {archive} (nothing deleted).")
+    print(f"     {con} conflict(s) left in place for you to resolve. recovery log: {log}")
+
+
 def main(argv: list[str] | None = None) -> None:
     for _stream in (sys.stdout, sys.stderr):  # print unicode paths on any console
         try:
@@ -208,6 +272,22 @@ def main(argv: list[str] | None = None) -> None:
     checkin.add_argument("--all", action="store_true", help="check in every full (non-pointer) entry")
     checkin.add_argument("--library", required=True, help="the library directory created by sync")
     checkin.set_defaults(fn=cmd_checkin)
+
+    merge = sub.add_parser("merge", help="consolidate duplicate-named entries across silos to one canonical copy (archives the rest; dry-run by default)")
+    merge.add_argument("--apply", action="store_true", help="retire the extra copies to ~/.claude/_dewey-retired (nothing deleted; recovery log written)")
+    merge.set_defaults(fn=cmd_merge)
+
+    scrub = sub.add_parser("scrub", help="redact secret values from memory notes; your .env stays the single source (dry-run by default)")
+    scrub.add_argument("--apply", action="store_true", help="rewrite notes with secret values replaced by [redacted -> .env]")
+    scrub.add_argument("--also", help="comma-separated extra literal strings to redact (e.g. a known password)")
+    scrub.set_defaults(fn=cmd_scrub)
+
+    con = sub.add_parser("consolidate", help="stitch notes into one scrubbed Markdown per major artery (topic); dry-run by default")
+    con.add_argument("--to", required=True, help="output directory for the artery MDs")
+    con.add_argument("--min", type=int, default=2, help="min notes to form an artery (smaller fold into _misc)")
+    con.add_argument("--also", help="comma-separated extra literal strings to scrub")
+    con.add_argument("--apply", action="store_true", help="write the artery files")
+    con.set_defaults(fn=cmd_consolidate)
 
     args = parser.parse_args(argv)
     args.fn(args)
