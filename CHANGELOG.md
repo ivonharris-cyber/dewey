@@ -2,6 +2,30 @@
 
 All notable changes to Dewey are documented here. This project follows [Semantic Versioning](https://semver.org).
 
+## [0.4.0] — 2026-07-10
+
+The **Graphify meld** — Dewey the librarian gains a cartographer. First wave of the
+"multi-waved brain" (see `docs/DEWEY-GRAPHIFY-MELD.md`): keyword retrieval becomes
+graph-guided retrieval, without losing the one-index / secret-hygiene / files-win laws.
+
+### Added
+- **`dewey graph --to <library>`** — builds a queryable knowledge graph over the
+  **sanitised** library via [Graphify](https://github.com/Graphify-Labs/graphify)
+  (PyPI `graphifyy`). Points Graphify only at the synced library, so the graph can
+  never ingest one of the 16 secret-named files `sync` already excluded. The graph is a
+  **derived cache** — rebuilt from the files, never a second source of truth.
+- **`dewey ask "<question>" --to <library>`** — returns the *few* entries that answer a
+  question, ready to `checkout`. With a graph present it asks Graphify and resolves the
+  cited entries; with no graph (or Graphify not installed) it degrades to a **ranked
+  keyword** fallback, so the verb always works and gets sharper once the graph exists.
+- `dewey/graph.py` + 4 tests (24 total). We wrap Graphify's CLI and extract only stable
+  `.md` filename references — never hand-parse its internal JSON schema, so the meld
+  survives upstream format changes.
+
+### Notes
+- Graphify is **not** a Dewey dependency: the core stays zero-dependency and both new
+  verbs run without it (keyword mode). Install `graphifyy` yourself to enable graph mode.
+
 ## [0.3.0] — 2026-06-11
 
 The Reference Desk goes live as a **local MCP server**.

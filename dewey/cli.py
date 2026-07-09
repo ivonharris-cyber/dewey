@@ -5,7 +5,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import __version__, core
+from . import __version__, core, graph
 
 def _selected(silos, name, want_all):
     """Yield (silo, file) pairs matching a filename, or every file with --all."""
@@ -227,6 +227,41 @@ def cmd_merge(args: argparse.Namespace) -> None:
     print(f"     {con} conflict(s) left in place for you to resolve. recovery log: {log}")
 
 
+def cmd_graph(args: argparse.Namespace) -> None:
+    library = Path(args.to).resolve()
+    if not library.is_dir():
+        print(f"error: {library} is not a library directory (run sync first)")
+        raise SystemExit(2)
+    build = graph.build_graph(library)
+    print(build.message)
+    if build.ok:
+        print(f"[ok] graph cached in {core.portable(build.out_dir)}")
+        for a in build.artifacts:
+            print(f"     {a.name}")
+        print("The graph is a derived cache — rebuilt from the library, never a second source of truth.")
+    else:
+        raise SystemExit(1)
+
+
+def cmd_ask(args: argparse.Namespace) -> None:
+    library = Path(args.to).resolve()
+    if not library.is_dir():
+        print(f"error: {library} is not a library directory (run sync first)")
+        raise SystemExit(2)
+    res = graph.ask(library, args.question)
+    print(f"[{res.mode}] {res.note}\n")
+    if not res.entries:
+        print("  no entries matched.")
+        return
+    for e in res.entries[:args.limit]:
+        print(f"  {e.klass:13} {e.name}")
+        if e.summary:
+            print(f"                {e.summary[:100]}")
+    shown = min(len(res.entries), args.limit)
+    print(f"\n{shown} of {len(res.entries)} entr{'y' if len(res.entries) == 1 else 'ies'}. "
+          f"Load with:  dewey checkout <name>")
+
+
 def main(argv: list[str] | None = None) -> None:
     for _stream in (sys.stdout, sys.stderr):  # print unicode paths on any console
         try:
@@ -288,6 +323,16 @@ def main(argv: list[str] | None = None) -> None:
     con.add_argument("--also", help="comma-separated extra literal strings to scrub")
     con.add_argument("--apply", action="store_true", help="write the artery files")
     con.set_defaults(fn=cmd_consolidate)
+
+    graph_p = sub.add_parser("graph", help="build a queryable knowledge graph over the library (via Graphify; derived cache)")
+    graph_p.add_argument("--to", required=True, help="the library directory created by sync")
+    graph_p.set_defaults(fn=cmd_graph)
+
+    ask = sub.add_parser("ask", help="find the few entries that answer a question (graph-guided; falls back to keyword)")
+    ask.add_argument("question", help="a plain-language question about your memory")
+    ask.add_argument("--to", required=True, help="the library directory created by sync")
+    ask.add_argument("--limit", type=int, default=8, help="max entries to show (default 8)")
+    ask.set_defaults(fn=cmd_ask)
 
     args = parser.parse_args(argv)
     args.fn(args)
