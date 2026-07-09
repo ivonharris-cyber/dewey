@@ -36,6 +36,13 @@ surface where you watch Bond think.
   when a tool fires, listens on your prompts, blinks and idle-sways at rest. The page moved to a single
   **ES module on modern three (r170) via import map**, so the brain and avatar share one renderer stack;
   three / OrbitControls / GLTFLoader / three-vrm all vendored offline. Verified live (`bond-avatar-reacting`).
+- **Bond's voice + moogles** — Bond speaks each reply aloud via **edge-tts** (the Hermes voice,
+  `en-GB-SoniaNeural`); a Stop hook spawns `bond-speak.py` (trims the last reply → mp3) and the avatar
+  **lipsyncs to the real audio amplitude**. A **double-clap** wakes Bond (mic listener — no push-to-talk).
+  Every **subagent** you spawn pops a **moogle** at the bottom of the brain (PostToolUse + SubagentStop
+  hooks track live agents), kupo. Verified live (`bond-moogles`). NOTE: Claude Code has no native
+  wake-word/hands-free input, so routing *spoken* words INTO the CLI needs an external bridge
+  (`claude -p` / Agent SDK) — a separate Bond voice-agent, planned.
 
 ## [0.5.0] — 2026-07-10
 
