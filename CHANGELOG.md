@@ -25,6 +25,12 @@ surface where you watch Bond think.
   screenshotted the result (`bond-dashboard-v2`).
 - Desktop launcher `BondBrain/bond-desktop.ps1` (rebuild + serve + open fullscreen) and a
   nightly Dreamstate step that rebuilds the dashboard and scouts 5 new skills/day.
+- **Live cognition** — a `PostToolUse` / `UserPromptSubmit` / `Stop` hook
+  (`BondBrain/hooks/bond-activity.py`, registered in `~/.claude/settings.json`) writes a tiny
+  `bond-activity.json`; the dashboard polls it and **fires pulses along the memory nodes each
+  real tool call touched** (matched by label), with a gold halo on the lit nodes. Running tasks
+  get car-dashboard **countdown wheels**; idle keeps a healthy always-flowing baseline (no dark
+  orphans — the k-NN synapse web connects every node). Verified live in-session (`bond-live-firing`).
 
 ## [0.5.0] — 2026-07-10
 

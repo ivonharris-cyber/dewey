@@ -180,8 +180,15 @@ _TEMPLATE = r"""<!DOCTYPE html>
   .stat .n.g { color:var(--gold); }
   #tasks { margin-top:auto; }
   #tasks h3 { font-size:11px; letter-spacing:.2em; color:var(--dim); margin:4px 0 8px; }
-  .task { display:flex; align-items:center; gap:8px; font-size:12px; padding:4px 0; color:#cdd2e0; }
-  .task i { width:8px; height:8px; border-radius:50%; background:var(--gold); box-shadow:0 0 8px var(--gold); flex:0 0 auto; }
+  .task { display:flex; align-items:center; gap:9px; font-size:12px; padding:5px 0; color:#cdd2e0; }
+  @property --p { syntax:'<number>'; inherits:false; initial-value:100; }
+  .task .wheel { width:18px; height:18px; border-radius:50%; flex:0 0 auto; position:relative;
+    background:conic-gradient(var(--gold) calc(var(--p)*1%), rgba(255,255,255,.07) 0);
+    animation:countdown var(--dur,3s) linear infinite; box-shadow:0 0 8px rgba(255,215,120,.35); }
+  .task .wheel::after { content:''; position:absolute; inset:3px; border-radius:50%; background:#0b0d16; }
+  .task.pending .wheel { animation:none; box-shadow:none;
+    background:conic-gradient(rgba(255,255,255,.14) 100%, transparent 0); }
+  @keyframes countdown { from { --p:100; } to { --p:0; } }
   /* centre brain */
   #brainwrap { grid-row:1; grid-column:2; position:relative; overflow:hidden; }
   #brain { position:absolute; inset:0; }
@@ -237,9 +244,11 @@ document.getElementById('stats').innerHTML = [
   ['tokensOut','TOKENS OUT',true],['brainNodes','BRAIN NODES',false],
 ].map(([k,label,g])=>`<div class="stat"><div class="n ${g?'g':''}">${fmt(S[k])}</div><div class="k">${label}</div></div>`).join('');
 const tl = document.getElementById('tasklist');
-(BOND.tasks.length ? BOND.tasks : [{title:'idle — dreaming'}]).slice(0,6).forEach(t=>{
-  const d=document.createElement('div'); d.className='task';
-  d.innerHTML=`<i></i>${(t.title||t.subject||'task').slice(0,42)}`; tl.appendChild(d);
+(BOND.tasks.length ? BOND.tasks : [{title:'idle — dreaming', status:'pending'}]).slice(0,6).forEach((t,i)=>{
+  const running = (t.status||'in_progress') === 'in_progress';
+  const d=document.createElement('div'); d.className='task'+(running?'':' pending');
+  d.innerHTML=`<span class="wheel" style="--dur:${(2.2+i*0.7).toFixed(1)}s"></span>${(t.title||t.subject||'task').slice(0,40)}`;
+  tl.appendChild(d);
 });
 
 /* ---------- charts ---------- */
@@ -345,34 +354,96 @@ lg.setAttribute('color', new THREE.BufferAttribute(lcol,3));
 scene.add(new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ vertexColors:true,
   transparent:true, opacity:.17, blending:THREE.AdditiveBlending, depthWrite:false })));
 
-// pulse-packets firing along edges
-const NP=280, pulses=[];
+// edges incident to each node — so a thought can fire along what it touched
+const edgesByNode = Array.from({length:nodes.length}, ()=>[]);
+edges.forEach((e,i)=>{ edgesByNode[e[0]].push(i); edgesByNode[e[1]].push(i); });
+
+// active thought: the nodes the current tool call lit up
+let activeSet = [], activeGlow = 0;
+
+// highlight overlay — gold halos on the lit nodes
+const HL = 24; const hpos=new Float32Array(HL*3);
+const hg=new THREE.BufferGeometry();
+hg.setAttribute('position', new THREE.BufferAttribute(hpos,3)); hg.setDrawRange(0,0);
+const hmat=new THREE.PointsMaterial({ size:20, map:SPRITE, color:0xffe08a, transparent:true,
+  opacity:0, depthWrite:false, blending:THREE.AdditiveBlending, sizeAttenuation:true });
+scene.add(new THREE.Points(hg, hmat));
+function rebuildHighlight(){ const n=Math.min(activeSet.length, HL);
+  for(let i=0;i<n;i++){ const nd=nodes[activeSet[i]]; hpos[i*3]=nd.x; hpos[i*3+1]=nd.y; hpos[i*3+2]=nd.z; }
+  hg.setDrawRange(0,n); hg.attributes.position.needsUpdate=true; }
+
+// pulse-packets firing along edges (always alive = a healthy brain)
+const NP=300, pulses=[];
 const ppos=new Float32Array(NP*3), pcol=new Float32Array(NP*3);
-function seed(p){ const e=edges[(Math.random()*edges.length)|0]; p.a=e[0]; p.b=e[1];
-  p.t=Math.random(); p.sp=0.004+Math.random()*0.010; const c=new THREE.Color(nodes[e[0]].color);
-  p.r=c.r; p.g=c.g; p.bb=c.b; }
-for(let i=0;i<NP;i++){ const p={}; seed(p); pulses.push(p); }
+function seed(p, biased){
+  let e;
+  if(biased && activeSet.length && Math.random()<0.75){
+    const src = activeSet[(Math.random()*activeSet.length)|0];
+    const inc = edgesByNode[src];
+    e = inc.length ? edges[inc[(Math.random()*inc.length)|0]] : edges[(Math.random()*edges.length)|0];
+  } else { e = edges[(Math.random()*edges.length)|0]; }
+  p.a=e[0]; p.b=e[1]; p.t=Math.random(); p.sp=0.004+Math.random()*0.010;
+  const c=new THREE.Color(nodes[e[0]].color); p.r=c.r; p.g=c.g; p.bb=c.b;
+}
+for(let i=0;i<NP;i++){ const p={}; seed(p,false); pulses.push(p); }
 const pg=new THREE.BufferGeometry();
 pg.setAttribute('position', new THREE.BufferAttribute(ppos,3));
 pg.setAttribute('color', new THREE.BufferAttribute(pcol,3));
 scene.add(new THREE.Points(pg, new THREE.PointsMaterial({ size:9, map:SPRITE, vertexColors:true,
   transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, sizeAttenuation:true })));
 
-const thinkEl=document.getElementById('think'); thinkEl.innerHTML='resting &mdash; runners idle';
+const thinkEl=document.getElementById('think'); thinkEl.innerHTML='resting &mdash; brain healthy';
 let mood=0; // 0 rest .. 1 firing
-function fireThought(){ mood=1; thinkEl.innerHTML='<b>hatching an idea&hellip;</b><br>synapses firing';
-  setTimeout(()=>{ mood=0; thinkEl.innerHTML='resting &mdash; the brain idles'; }, 4200); }
-setInterval(fireThought, 8000); setTimeout(fireThought, 2500);
+
+// find memory nodes whose label matches what the tool touched, and light them
+function lightMatch(text){
+  const toks=(text||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').split(' ').filter(w=>w.length>3);
+  const hits=[];
+  for(let i=0;i<nodes.length && hits.length<HL;i++){
+    const lab=nodes[i].label.toLowerCase();
+    if(toks.some(w=>lab.includes(w))) hits.push(i);
+  }
+  if(!hits.length){ for(let k=0;k<4;k++) hits.push((Math.random()*nodes.length)|0); }
+  activeSet=hits; activeGlow=1; rebuildHighlight();
+}
+
+// LIVE: poll the activity file the PostToolUse hook writes → fire on real tool calls
+let lastSeq=-1, restT=null;
+const TOOL_ICON={Read:'👁',Edit:'✎',Write:'✎',Bash:'⌘',PowerShell:'⌘',Grep:'⌕',Glob:'⌕',
+  WebSearch:'🌐',WebFetch:'🌐',Task:'⚙',TaskUpdate:'⚙',mcp:'◇'};
+async function pollActivity(){
+  try{
+    const r=await fetch('bond-activity.json?t='+Date.now(),{cache:'no-store'});
+    if(!r.ok) return; const a=await r.json();
+    if(a.seq!=null && a.seq!==lastSeq){
+      lastSeq=a.seq; mood=1;
+      const ic=TOOL_ICON[(a.tool||'').split('__')[0]]||'⚡';
+      thinkEl.innerHTML=`<b>${ic} ${a.tool||'thinking'}</b>`+(a.target?`<br>${a.target}`:'');
+      lightMatch(a.target||a.tool);
+      clearTimeout(restT);
+      restT=setTimeout(()=>{ mood=0; thinkEl.innerHTML='resting &mdash; brain healthy'; }, 2600);
+    } else if(a.state==='listening' && a.seq===lastSeq){
+      thinkEl.innerHTML='<b>listening&hellip;</b>';
+    }
+  }catch(e){}
+}
+setInterval(pollActivity, 600); pollActivity();
+
+// gentle ambient thought so the brain dreams even when no tools run (never dark)
+setInterval(()=>{ if(mood===0 && Math.random()<0.5) lightMatch(nodes[(Math.random()*nodes.length)|0].label); }, 6500);
 
 function animate(){
   requestAnimationFrame(animate);
-  for(let i=0;i<NP;i++){ const p=pulses[i]; p.t+=p.sp*(mood?2.4:1);
-    if(p.t>=1){ seed(p); }
+  const fire = mood + activeGlow*0.4;            // idle keeps a healthy baseline of flow
+  for(let i=0;i<NP;i++){ const p=pulses[i]; p.t += p.sp*(1 + fire*1.6);
+    if(p.t>=1){ seed(p, activeGlow>0.15); }
     const a=nodes[p.a], b=nodes[p.b], t=p.t;
     ppos[i*3]=a.x+(b.x-a.x)*t; ppos[i*3+1]=a.y+(b.y-a.y)*t; ppos[i*3+2]=a.z+(b.z-a.z)*t;
-    const k=mood?1:0.7; pcol[i*3]=p.r*k+ (mood?0.3:0); pcol[i*3+1]=p.g*k+(mood?0.2:0); pcol[i*3+2]=p.bb*k+(mood?0.1:0);
+    const k=0.72+fire*0.28;
+    pcol[i*3]=p.r*k+fire*0.28; pcol[i*3+1]=p.g*k+fire*0.2; pcol[i*3+2]=p.bb*k+fire*0.1;
   }
   pg.attributes.position.needsUpdate=true; pg.attributes.color.needsUpdate=true;
+  if(activeGlow>0){ activeGlow=Math.max(0, activeGlow-0.006); hmat.opacity=activeGlow*0.9; }
   controls.update(); renderer.render(scene,camera);
 }
 animate();
