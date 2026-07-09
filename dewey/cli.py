@@ -5,7 +5,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import __version__, core, graph, brain3d
+from . import __version__, core, graph, brain3d, dashboard
 
 def _selected(silos, name, want_all):
     """Yield (silo, file) pairs matching a filename, or every file with --all."""
@@ -254,6 +254,20 @@ def cmd_brain(args: argparse.Namespace) -> None:
     print(f"     Open it in a browser. Each `dewey ask` lights the path it touched (via {brain3d.THOUGHT_JSON}).")
 
 
+def cmd_dashboard(args: argparse.Namespace) -> None:
+    library = Path(args.to).resolve()
+    if not library.is_dir():
+        print(f"error: {library} is not a library directory (run sync first)")
+        raise SystemExit(2)
+    out_dir = Path(args.out).resolve()
+    claude_dir = Path(args.claude_dir).expanduser().resolve()
+    index, stats = dashboard.write_dashboard(library, out_dir, claude_dir)
+    print(f"[ok] 007-Bond cognition dashboard: {core.portable(index)}")
+    print(f"     {stats['brainNodes']} nodes / {stats['brainLinks']} links · "
+          f"{stats['daysActive']} days active · {stats['sessions']} sessions")
+    print(f"     Serve the folder and open it fullscreen (vendored libs beside it).")
+
+
 def cmd_ask(args: argparse.Namespace) -> None:
     library = Path(args.to).resolve()
     if not library.is_dir():
@@ -340,6 +354,12 @@ def main(argv: list[str] | None = None) -> None:
     brain = sub.add_parser("brain", help="generate a living 3D brain (WebGL force-graph; runners fire on every thought)")
     brain.add_argument("--to", required=True, help="the library directory created by sync")
     brain.set_defaults(fn=cmd_brain)
+
+    dash = sub.add_parser("dashboard", help="build the 007-Bond cognition dashboard (colourful neural brain + avatar + stats + charts)")
+    dash.add_argument("--to", required=True, help="the library directory created by sync")
+    dash.add_argument("--out", required=True, help="output directory for the dashboard product (vendored libs must sit in <out>/vendor)")
+    dash.add_argument("--claude-dir", default="~/.claude", help="Claude Code dir holding stats-cache.json (default ~/.claude)")
+    dash.set_defaults(fn=cmd_dashboard)
 
     graph_p = sub.add_parser("graph", help="build a queryable knowledge graph over the library (via Graphify; derived cache)")
     graph_p.add_argument("--to", required=True, help="the library directory created by sync")

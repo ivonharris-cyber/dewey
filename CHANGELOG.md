@@ -2,6 +2,30 @@
 
 All notable changes to Dewey are documented here. This project follows [Semantic Versioning](https://semver.org).
 
+## [0.6.0] — 2026-07-10
+
+The **007-Bond cognition dashboard** — the brain becomes a full desktop product, not a
+wallpaper. First layer of the 007-Bond Desktop (see `[[project_007-bond]]`): a fullscreen
+surface where you watch Bond think.
+
+### Added
+- **`dewey dashboard --to <library> --out <dir>`** — builds a self-contained fullscreen
+  product (`index.html` + `bond-dashboard.json`):
+  - **Centre** — a custom **colourful neural brain** (Three.js): glowing nodes coloured by
+    Dewey class, a dense k-NN synapse web + the real wikilinks, and **pulse-packets firing
+    along the edges** (they brighten when a thought fires). Laid out as two hemispheres —
+    **left = logical** (`000/500/900`), **right = creative** (`400/300`) — around a central
+    **limbic core** (`100`). Anchored on two references (agalliat "Neural nervous system of
+    a brain", VoXelo "3D Quantum Neural Network").
+  - **Left** — the avatar slot (VTuber/VRM, wired next) + **live stats** from Claude Code's
+    `stats-cache.json` (days active, sessions, messages, tool calls, tokens, brain size).
+  - **Bottom** — Chart.js analytics: activity trend, tokens-by-model, memory-by-class.
+- `dewey/dashboard.py`. Three.js / OrbitControls / Chart.js vendored beside the output
+  (offline). Verified live: rendered 1490 nodes / 673 links in a headless browser and
+  screenshotted the result (`bond-dashboard-v2`).
+- Desktop launcher `BondBrain/bond-desktop.ps1` (rebuild + serve + open fullscreen) and a
+  nightly Dreamstate step that rebuilds the dashboard and scouts 5 new skills/day.
+
 ## [0.5.0] — 2026-07-10
 
 The **living 3D brain** — memory you can watch think.
