@@ -229,10 +229,13 @@ _TEMPLATE = r"""<!DOCTYPE html>
   </div>
 </div>
 
-<script src="vendor/three.min.js"></script>
-<script src="vendor/OrbitControls.js"></script>
 <script src="vendor/chart.umd.min.js"></script>
-<script>
+<script type="importmap">{ "imports": { "three": "./vendor/three.module.js" } }</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from './vendor/jsm/controls/OrbitControls.js';
+import { GLTFLoader } from './vendor/jsm/loaders/GLTFLoader.js';
+import { VRMLoaderPlugin, VRMUtils } from './vendor/three-vrm.module.js';
 const BOND = __DATA__;
 
 /* ---------- stat cards ---------- */
@@ -285,7 +288,7 @@ camera.position.set(0, 26, 520);
 const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 host.appendChild(renderer.domElement);
-const controls = new THREE.OrbitControls(camera, renderer.domElement);
+const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true; controls.dampingFactor = .06;
 controls.autoRotate = true; controls.autoRotateSpeed = .55; controls.enablePan = false;
 
@@ -298,7 +301,7 @@ function disc(){ const c=document.createElement('canvas'); c.width=c.height=64;
   const g=c.getContext('2d').createRadialGradient(32,32,0,32,32,32);
   g.addColorStop(0,'rgba(255,255,255,1)'); g.addColorStop(.25,'rgba(255,255,255,.85)');
   g.addColorStop(1,'rgba(255,255,255,0)'); const x=c.getContext('2d');
-  x.fillStyle=g; x.fillRect(0,0,64,64); const t=new THREE.Texture(c); t.needsUpdate=true; return t; }
+  x.fillStyle=g; x.fillRect(0,0,64,64); return new THREE.CanvasTexture(c); }
 const SPRITE = disc();
 
 // place nodes: two lobes (±x) + a central core
@@ -420,10 +423,11 @@ async function pollActivity(){
       const ic=TOOL_ICON[(a.tool||'').split('__')[0]]||'⚡';
       thinkEl.innerHTML=`<b>${ic} ${a.tool||'thinking'}</b>`+(a.target?`<br>${a.target}`:'');
       lightMatch(a.target||a.tool);
+      avatarSpeak(a);
       clearTimeout(restT);
       restT=setTimeout(()=>{ mood=0; thinkEl.innerHTML='resting &mdash; brain healthy'; }, 2600);
     } else if(a.state==='listening' && a.seq===lastSeq){
-      thinkEl.innerHTML='<b>listening&hellip;</b>';
+      thinkEl.innerHTML='<b>listening&hellip;</b>'; avatarListen();
     }
   }catch(e){}
 }
@@ -447,6 +451,63 @@ function animate(){
   controls.update(); renderer.render(scene,camera);
 }
 animate();
+
+/* ===== VRM avatar — the face, reacting to the same activity stream ===== */
+const aHost=document.getElementById('avatar');
+const aFace=document.getElementById('face'); if(aFace) aFace.style.display='none';
+const aCap=aHost.querySelector('.cap'); if(aCap){ aCap.textContent='BOND · loading…'; aCap.style.zIndex='2'; }
+const aScene=new THREE.Scene();
+const aCam=new THREE.PerspectiveCamera(22, 1, 0.08, 20);
+aCam.position.set(0, 1.38, 0.82); aCam.lookAt(0, 1.36, 0);
+const aRenderer=new THREE.WebGLRenderer({antialias:true, alpha:true});
+aRenderer.setPixelRatio(Math.min(devicePixelRatio,2));
+aRenderer.outputColorSpace = THREE.SRGBColorSpace;
+aRenderer.domElement.style.cssText='position:absolute;inset:0;width:100%;height:100%;z-index:0';
+aHost.appendChild(aRenderer.domElement);
+const aKey=new THREE.DirectionalLight(0xffffff,2.4); aKey.position.set(0.5,1.6,1.4); aScene.add(aKey);
+aScene.add(new THREE.AmbientLight(0x99aaff,1.7));
+function aResize(){ const w=aHost.clientWidth,h=aHost.clientHeight; if(!w||!h)return;
+  aRenderer.setSize(w,h); aCam.aspect=w/h; aCam.updateProjectionMatrix(); }
+new ResizeObserver(aResize).observe(aHost); aResize();
+
+let vrm=null; const aClock=new THREE.Clock();
+let talk=0, gesture=null, gT=0, happy=0, blinkT=2+Math.random()*3;
+const vLoader=new GLTFLoader(); vLoader.register(p=>new VRMLoaderPlugin(p));
+vLoader.load('vendor/avatar-alt.vrm', (gltf)=>{
+  vrm=gltf.userData.vrm;
+  try{ if(vrm.meta && vrm.meta.metaVersion==='0') VRMUtils.rotateVRM0(vrm); }catch(e){}
+  aScene.add(vrm.scene);
+  if(aCap) aCap.textContent='BOND · online';
+}, undefined, (e)=>{ if(aCap) aCap.textContent='avatar load failed'; console.log('vrm error', e); });
+
+function setX(name,v){ if(vrm){ try{ vrm.expressionManager.setValue(name, v); }catch(e){} } }
+function avatarSpeak(a){ talk=2.4; gesture='nod'; gT=0.8; happy=Math.min(1, happy+0.55); }
+function avatarListen(){ talk=0; }
+function avatarNo(){ gesture='shake'; gT=0.9; }   // reserved: "no"
+
+function avatarAnimate(){
+  requestAnimationFrame(avatarAnimate);
+  const dt=Math.min(aClock.getDelta(), 0.05);
+  if(vrm){
+    const t=performance.now()/1000;
+    const head=vrm.humanoid.getNormalizedBoneNode('head');
+    const spine=vrm.humanoid.getNormalizedBoneNode('spine');
+    if(spine) spine.rotation.y=Math.sin(t*0.6)*0.03;
+    if(head){ head.rotation.set(0,0,Math.sin(t*0.9)*0.02);
+      if(gesture && gT>0){ gT-=dt; const s=Math.sin((0.8-gT)/0.8*Math.PI*2)*Math.max(0,gT);
+        if(gesture==='nod') head.rotation.x=s*0.6; else head.rotation.y=s*0.7;
+        if(gT<=0) gesture=null; } }
+    blinkT-=dt; let blink=0;
+    if(blinkT<0.14) blink=1-Math.min(1,Math.abs(blinkT)/0.14);
+    if(blinkT<0) blinkT=2.4+Math.random()*3.4;
+    setX('blink', Math.max(0,blink));
+    if(talk>0){ talk-=dt; setX('aa', Math.abs(Math.sin(t*13))*0.5+0.12); } else setX('aa',0);
+    happy=Math.max(0, happy-dt*0.14); setX('happy', happy*0.7); setX('relaxed', 0.15);
+    vrm.update(dt);
+  }
+  aRenderer.render(aScene, aCam);
+}
+avatarAnimate();
 </script>
 </body></html>
 """

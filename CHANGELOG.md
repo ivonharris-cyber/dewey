@@ -31,6 +31,11 @@ surface where you watch Bond think.
   real tool call touched** (matched by label), with a gold halo on the lit nodes. Running tasks
   get car-dashboard **countdown wheels**; idle keeps a healthy always-flowing baseline (no dark
   orphans — the k-NN synapse web connects every node). Verified live in-session (`bond-live-firing`).
+- **VRM avatar** — the left panel renders a real VTuber ([@pixiv/three-vrm](https://github.com/pixiv/three-vrm)
+  3.x + a free VRoid model) that reacts to the **same** activity stream: talks (lipsync) + nods + smiles
+  when a tool fires, listens on your prompts, blinks and idle-sways at rest. The page moved to a single
+  **ES module on modern three (r170) via import map**, so the brain and avatar share one renderer stack;
+  three / OrbitControls / GLTFLoader / three-vrm all vendored offline. Verified live (`bond-avatar-reacting`).
 
 ## [0.5.0] — 2026-07-10
 
