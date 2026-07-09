@@ -80,3 +80,18 @@ DEWEY_LIBRARY=/path/to/brain/Memory dewey-mcp
 ```
 
 The point isn't the exact multiplier — it's the shape. Memory grows without bound; context does not. Ask the librarian; don't carry the library.
+
+## Re-measured 2026-07-10 — `dewey ask` (v0.4.0), a bigger brain, the same shape
+
+The estate grew to **5.5 MB** of Markdown (~1.45M tokens — **7.2× over the 200K window**). Asked one
+question through `dewey ask` and pulled the three entries that answered it:
+
+| Metric | Value |
+|---|---:|
+| Whole brain re-read cold | ~1,445,000 tokens |
+| One `dewey ask` (3 entries) | ~171 tokens |
+| **Savings on the recall** | **99.99% — 8,451× lighter** |
+
+Measured live on 2026-07-10 (Windows), tokens at ~3.9 bytes/token off this repo's own earlier benchmark.
+The brain nearly doubled; the cost of *knowing what you already know* stayed a rounding error. That is the
+whole thesis of the Bond evolution: **never repeat what you've already learned.**
