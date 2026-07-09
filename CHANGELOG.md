@@ -43,6 +43,11 @@ surface where you watch Bond think.
   hooks track live agents), kupo. Verified live (`bond-moogles`). NOTE: Claude Code has no native
   wake-word/hands-free input, so routing *spoken* words INTO the CLI needs an external bridge
   (`claude -p` / Agent SDK) — a separate Bond voice-agent, planned.
+- **Reader panel + full widescreen** — the desktop is now a 3-column layout (avatar/stats · brain ·
+  reader) that fills the widescreen. **Click any node to open its note** in the right panel,
+  Obsidian-style: raycast picking on the brain Points, with note bodies exported **secret-safe** — every
+  body run through `core.scrub_text`, sensitive/`.env` files skipped — to `notes/` and loaded on click
+  with light markdown rendering. Verified live (`bond-reader-open`).
 
 ## [0.5.0] — 2026-07-10
 

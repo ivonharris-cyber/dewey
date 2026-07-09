@@ -16,10 +16,14 @@ Endgame is a native Windows product (Ivon in C / a WebView2 shell); this is v1.
 from __future__ import annotations
 
 import json
+import re
 from collections import Counter
 from pathlib import Path
 
-from . import brain3d
+from . import brain3d, core
+
+NOTES_DIR = "notes"
+_NOTE_MAX = 6000
 
 DASHBOARD_HTML = "index.html"
 DASHBOARD_JSON = "bond-dashboard.json"
@@ -41,6 +45,29 @@ _REGION = {
     "400-projects": "right", "300-agents": "right",
     "100-people": "core",
 }
+
+
+def _slug(name: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", name.lower().replace(".md", "")).strip("-")
+
+
+def write_notes(library: Path, out_dir: Path) -> int:
+    """Export each note's body — SCRUBBED of secrets — for the reader panel. Secret-safe:
+    sensitive/.env files are skipped entirely; every body runs through core.scrub_text."""
+    notes = Path(out_dir) / NOTES_DIR
+    notes.mkdir(parents=True, exist_ok=True)
+    written = 0
+    for e in core.library_entries(library):
+        if core.is_sensitive(e.name) or core.is_env_file(e.name):
+            continue
+        try:
+            body = e.path.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        scrubbed, _ = core.scrub_text(body)
+        (notes / f"{_slug(e.name)}.md").write_text(scrubbed[:_NOTE_MAX], encoding="utf-8")
+        written += 1
+    return written
 
 
 def _load_stats(claude_dir: Path) -> dict:
@@ -69,6 +96,7 @@ def assemble_data(library: Path, claude_dir: Path, out_dir: Path) -> dict:
     for n in graph["nodes"]:
         n["color"] = _VIVID.get(n["klass"], _FALLBACK)
         n["region"] = _REGION.get(n["klass"], "core")
+        n["slug"] = _slug(n["id"])
 
     stats = _load_stats(claude_dir)
     daily = stats.get("dailyActivity", [])
@@ -116,6 +144,7 @@ def write_dashboard(library: Path, out_dir: Path, claude_dir: Path) -> tuple[Pat
     data = assemble_data(library, claude_dir, out_dir)
 
     (out_dir / DASHBOARD_JSON).write_text(json.dumps(data), encoding="utf-8")
+    write_notes(library, out_dir)
     html = _TEMPLATE.replace("__DATA__", json.dumps(data))
     index = out_dir / DASHBOARD_HTML
     index.write_text(html, encoding="utf-8")
@@ -140,7 +169,17 @@ _TEMPLATE = r"""<!DOCTYPE html>
   html,body { margin:0; height:100%; background:var(--bg); color:var(--ink);
               font-family:var(--font); overflow:hidden; }
   #app { position:fixed; inset:0; display:grid;
-         grid-template-columns:340px 1fr; grid-template-rows:1fr 236px; gap:14px; padding:14px; }
+         grid-template-columns:326px 1fr 384px; grid-template-rows:1fr 236px; gap:14px; padding:14px; }
+  /* reader panel (right) */
+  #reader { grid-row:1; grid-column:3; display:flex; flex-direction:column; padding:16px 18px; overflow:hidden; }
+  #reader-head { border-bottom:1px solid var(--edge); padding-bottom:11px; margin-bottom:12px; flex:0 0 auto; }
+  #reader-title { font-size:15px; color:var(--ink); font-weight:600; }
+  #reader-sub { font-size:11px; color:var(--dim); margin-top:5px; letter-spacing:.1em; }
+  #reader-sub .chip { display:inline-block; border:1px solid; border-radius:20px; padding:2px 9px; font-size:10px; letter-spacing:.08em; }
+  #reader-body { overflow:auto; font-size:12.5px; line-height:1.65; color:#c3c8d6; white-space:pre-wrap; word-break:break-word; }
+  #reader-body h4 { color:#fff; font-size:13px; margin:13px 0 3px; }
+  #reader-body code { background:rgba(255,255,255,.07); padding:1px 5px; border-radius:5px; color:var(--gold); font-size:11.5px; }
+  #reader-body .wl { color:var(--accent); }
   .panel { background:var(--panel); border:1px solid var(--edge); border-radius:16px;
            backdrop-filter:blur(9px); }
   /* left column */
@@ -228,6 +267,14 @@ _TEMPLATE = r"""<!DOCTYPE html>
     <div id="brainlabel">THE BRAIN · LEFT LOGIC · RIGHT CREATIVE · CORE LIMBIC</div>
     <div id="think">waking&hellip;</div>
     <div id="moogles"></div>
+  </div>
+
+  <div id="reader" class="panel">
+    <div id="reader-head">
+      <div id="reader-title">THE READER</div>
+      <div id="reader-sub">click a glowing node to open its note</div>
+    </div>
+    <div id="reader-body">Select any node in the brain to read that memory here — like opening a note in Obsidian. Bodies are scrubbed of secrets.</div>
   </div>
 
   <div id="charts" class="panel">
@@ -334,9 +381,10 @@ nodes.forEach((n,i)=>{ npos[i*3]=n.x; npos[i*3+1]=n.y; npos[i*3+2]=n.z;
 const ng=new THREE.BufferGeometry();
 ng.setAttribute('position', new THREE.BufferAttribute(npos,3));
 ng.setAttribute('color', new THREE.BufferAttribute(ncol,3));
-scene.add(new THREE.Points(ng, new THREE.PointsMaterial({ size:4.4, map:SPRITE,
+const nodePoints = new THREE.Points(ng, new THREE.PointsMaterial({ size:4.4, map:SPRITE,
   vertexColors:true, transparent:true, opacity:.92, depthWrite:false, blending:THREE.AdditiveBlending,
-  sizeAttenuation:true })));
+  sizeAttenuation:true }));
+scene.add(nodePoints);
 
 // dense synapse web = k nearest neighbours (visual), plus real wikilinks
 function synapses(k){
@@ -461,6 +509,34 @@ function renderMoogles(labels){
     d.innerHTML=`<div class="kupo">kupo!</div>${MOOGLE_SVG}<div>${lab||'agent'}</div>`;
     moogleHost.appendChild(d); });
 }
+/* node picking — click a node to open its (scrubbed) note, Obsidian-style */
+const raycaster=new THREE.Raycaster(); raycaster.params.Points.threshold=6;
+const ptr=new THREE.Vector2(); let downXY=null, downT=0;
+const rdT=document.getElementById('reader-title'), rdS=document.getElementById('reader-sub'), rdB=document.getElementById('reader-body');
+function mdLite(t){ return t
+  .replace(/^---[\s\S]*?---\s*/,'')
+  .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+  .replace(/`([^`]+)`/g,'<code>$1</code>')
+  .replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>')
+  .replace(/\[\[([^\]|#]+)[^\]]*\]\]/g,'<span class="wl">$1</span>')
+  .replace(/^#{1,6}\s*(.+)$/gm,'<h4>$1</h4>').trim(); }
+async function openNote(idx){ const n=nodes[idx]; if(!n) return;
+  activeSet=[idx]; activeGlow=1; rebuildHighlight();
+  rdT.textContent=n.label; rdS.innerHTML='<span class="chip" style="border-color:'+n.color+';color:'+n.color+'">'+n.klass+'</span>';
+  rdB.innerHTML='loading&hellip;';
+  try{ const r=await fetch('notes/'+n.slug+'.md?t='+Date.now(),{cache:'no-store'});
+    rdB.innerHTML = r.ok ? mdLite(await r.text()) : (n.summary||'(no note body)'); }
+  catch(e){ rdB.textContent = n.summary||'(unavailable)'; } }
+renderer.domElement.addEventListener('pointerdown', e=>{ downXY=[e.clientX,e.clientY]; downT=performance.now(); });
+renderer.domElement.addEventListener('pointerup', e=>{ if(!downXY) return;
+  const moved=Math.hypot(e.clientX-downXY[0], e.clientY-downXY[1]), dt=performance.now()-downT; downXY=null;
+  if(moved>6 || dt>350) return;
+  const rect=renderer.domElement.getBoundingClientRect();
+  ptr.x=((e.clientX-rect.left)/rect.width)*2-1; ptr.y=-((e.clientY-rect.top)/rect.height)*2+1;
+  raycaster.setFromCamera(ptr, camera);
+  const hits=raycaster.intersectObject(nodePoints);
+  if(hits.length) openNote(hits[0].index);
+});
 setInterval(pollActivity, 600); pollActivity();
 
 // gentle ambient thought so the brain dreams even when no tools run (never dark)
