@@ -194,6 +194,13 @@ _TEMPLATE = r"""<!DOCTYPE html>
   #brain { position:absolute; inset:0; }
   #think { position:absolute; top:16px; right:18px; text-align:right; font-size:12px; color:var(--dim); }
   #think b { color:var(--gold); }
+  #moogles { position:absolute; left:0; right:0; bottom:12px; display:flex; justify-content:center;
+             gap:26px; z-index:10; pointer-events:none; }
+  .moogle { display:flex; flex-direction:column; align-items:center; gap:2px;
+            animation:bob 2.3s ease-in-out infinite; font-size:9px; letter-spacing:.1em; color:#cfd3dc; }
+  .moogle .kupo { color:#ff9ecf; animation:kupo 3.6s ease-in-out infinite; }
+  @keyframes bob { 0%,100%{transform:translateY(0);} 50%{transform:translateY(-9px);} }
+  @keyframes kupo { 0%,70%,100%{opacity:0;} 35%{opacity:1;} }
   #brainlabel { position:absolute; left:18px; top:16px; font-size:11px; letter-spacing:.26em; color:var(--dim); }
   /* bottom charts */
   #charts { grid-row:2; grid-column:1 / -1; display:grid; grid-template-columns:2fr 1fr 1fr; gap:14px; padding:14px; }
@@ -220,6 +227,7 @@ _TEMPLATE = r"""<!DOCTYPE html>
     <div id="brain"></div>
     <div id="brainlabel">THE BRAIN · LEFT LOGIC · RIGHT CREATIVE · CORE LIMBIC</div>
     <div id="think">waking&hellip;</div>
+    <div id="moogles"></div>
   </div>
 
   <div id="charts" class="panel">
@@ -429,7 +437,29 @@ async function pollActivity(){
     } else if(a.state==='listening' && a.seq===lastSeq){
       thinkEl.innerHTML='<b>listening&hellip;</b>'; avatarListen();
     }
+    renderMoogles(a.agents||[]);
   }catch(e){}
+}
+const moogleHost=document.getElementById('moogles');
+const MOOGLE_SVG=`<svg width="44" height="46" viewBox="0 0 44 46" xmlns="http://www.w3.org/2000/svg">
+<path d="M12 25 Q2 21 6 31 Q10 31 15 28 Z" fill="#b8a6e6" opacity=".9"/>
+<path d="M32 25 Q42 21 38 31 Q34 31 29 28 Z" fill="#b8a6e6" opacity=".9"/>
+<ellipse cx="22" cy="30" rx="10" ry="9" fill="#fdfdff"/>
+<circle cx="22" cy="17" r="10" fill="#fdfdff"/>
+<path d="M14 10 L12 4 L18 9 Z" fill="#fdfdff"/><path d="M30 10 L32 4 L26 9 Z" fill="#fdfdff"/>
+<line x1="22" y1="8" x2="22" y2="3" stroke="#e6e6ee" stroke-width="1.4"/>
+<circle cx="22" cy="2.6" r="3.4" fill="#ff5a7a"/>
+<circle cx="18" cy="17" r="1.5" fill="#33343c"/><circle cx="26" cy="17" r="1.5" fill="#33343c"/>
+<circle cx="15" cy="20" r="1.7" fill="#ffc0d3" opacity=".85"/><circle cx="29" cy="20" r="1.7" fill="#ffc0d3" opacity=".85"/>
+</svg>`;
+let mooShown='';
+function renderMoogles(labels){
+  const key=labels.join('|'); if(key===mooShown) return; mooShown=key;
+  moogleHost.innerHTML='';
+  labels.forEach((lab,i)=>{ const d=document.createElement('div'); d.className='moogle';
+    d.style.animationDelay=(i*0.35)+'s';
+    d.innerHTML=`<div class="kupo">kupo!</div>${MOOGLE_SVG}<div>${lab||'agent'}</div>`;
+    moogleHost.appendChild(d); });
 }
 setInterval(pollActivity, 600); pollActivity();
 
@@ -472,6 +502,7 @@ new ResizeObserver(aResize).observe(aHost); aResize();
 
 let vrm=null; const aClock=new THREE.Clock();
 let talk=0, gesture=null, gT=0, happy=0, blinkT=2+Math.random()*3;
+let sCtx=null, sAudio=null, sAnalyser=null, sData=null, lastSpeech=-1, speaking=false;
 const vLoader=new GLTFLoader(); vLoader.register(p=>new VRMLoaderPlugin(p));
 vLoader.load('vendor/avatar-alt.vrm', (gltf)=>{
   vrm=gltf.userData.vrm;
@@ -501,12 +532,51 @@ function avatarAnimate(){
     if(blinkT<0.14) blink=1-Math.min(1,Math.abs(blinkT)/0.14);
     if(blinkT<0) blinkT=2.4+Math.random()*3.4;
     setX('blink', Math.max(0,blink));
-    if(talk>0){ talk-=dt; setX('aa', Math.abs(Math.sin(t*13))*0.5+0.12); } else setX('aa',0);
+    if(speaking && sAnalyser){ sAnalyser.getByteTimeDomainData(sData); let s=0;
+      for(let i=0;i<sData.length;i++){ const v=(sData[i]-128)/128; s+=v*v; }
+      setX('aa', Math.min(1, Math.sqrt(s/sData.length)*3.6)*0.8); happy=Math.max(happy,0.25); }
+    else if(talk>0){ talk-=dt; setX('aa', Math.abs(Math.sin(t*13))*0.5+0.12); }
+    else setX('aa',0);
     happy=Math.max(0, happy-dt*0.14); setX('happy', happy*0.7); setX('relaxed', 0.15);
     vrm.update(dt);
   }
   aRenderer.render(aScene, aCam);
 }
+
+/* Bond talks back — play the edge-tts reply + lipsync from real audio amplitude */
+function playSpeech(){ try{
+  if(!sCtx) sCtx=new (window.AudioContext||window.webkitAudioContext)();
+  sAudio=new Audio('bond-speech.mp3?t='+Date.now());
+  const src=sCtx.createMediaElementSource(sAudio);
+  sAnalyser=sCtx.createAnalyser(); sAnalyser.fftSize=256; sData=new Uint8Array(sAnalyser.fftSize);
+  src.connect(sAnalyser); sAnalyser.connect(sCtx.destination);
+  speaking=true; if(aCap) aCap.textContent='BOND · speaking';
+  sAudio.onended=()=>{ speaking=false; if(aCap) aCap.textContent='BOND · online'; };
+  sCtx.resume(); sAudio.play().catch(()=>{ speaking=false; console.log('autoplay blocked — clap to enable voice'); });
+}catch(e){ console.log('speech err', e); } }
+async function pollSpeech(){ try{
+  const r=await fetch('bond-speech.json?t='+Date.now(),{cache:'no-store'}); if(!r.ok) return;
+  const s=await r.json(); if(s.id && s.id!==lastSpeech){ lastSpeech=s.id; playSpeech(); }
+}catch(e){} }
+setInterval(pollSpeech, 900);
+
+/* double-clap wake — no push-to-talk. Two claps within 650ms wakes Bond. */
+let wakeArmed=true, lastClap=0;
+async function initWake(){ try{
+  const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+  const wctx=new (window.AudioContext||window.webkitAudioContext)();
+  const src=wctx.createMediaStreamSource(stream); const an=wctx.createAnalyser(); an.fftSize=512;
+  src.connect(an); const buf=new Uint8Array(an.fftSize);
+  (function tick(){ requestAnimationFrame(tick); an.getByteTimeDomainData(buf);
+    let peak=0; for(let i=0;i<buf.length;i++){ const v=Math.abs(buf[i]-128); if(v>peak) peak=v; }
+    if(peak>74 && wakeArmed){ wakeArmed=false; setTimeout(()=>wakeArmed=true,150);
+      const now=performance.now(); if(now-lastClap<650) wake(); lastClap=now; }
+  })();
+}catch(e){ if(aCap) aCap.textContent='BOND · allow mic to clap-wake'; } }
+function wake(){ happy=0.9; gesture='nod'; gT=0.8; if(aCap) aCap.textContent='BOND · awake, listening';
+  thinkEl.innerHTML='<b>awake — listening</b>'; try{ if(sCtx) sCtx.resume(); }catch(e){} }
+initWake();
+
 avatarAnimate();
 </script>
 </body></html>
