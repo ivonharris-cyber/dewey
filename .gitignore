@@ -26,3 +26,9 @@ venv/
 .idea/
 .DS_Store
 Thumbs.db
+
+# personal AI-stack research pulled from Drive - not for the public repo
+/research/
+
+# Personal Frenchie reference photos (Zeus & Matilda) - never commit
+frenchie-refs/
