@@ -2,6 +2,22 @@
 
 All notable changes to Dewey are documented here. This project follows [Semantic Versioning](https://semver.org).
 
+## [0.5.0] — 2026-07-10
+
+The **living 3D brain** — memory you can watch think.
+
+### Added
+- **`dewey brain --to <library>`** — generates `_brain-3d.html`, a WebGL force-graph
+  (vasturiano/3d-force-graph, Three.js) of the whole library. Nodes coloured by Dewey
+  class; **directional particles run along every edge** — the synapse-runners. Fully
+  local except the graph library from a CDN. Derived artifact, rebuilt from the files.
+- **Thought traces** — `dewey ask` now writes `_brain-thought.json` (the entries it
+  touched, rank-ordered). The viewer polls it and lights that route: the **origin**
+  (where the thought started, rank[0]) glows biggest and whitest, the **reach** (how
+  deep it went) glows gold. Retrieval becomes a visible burst of synaptic traffic.
+- `dewey/brain3d.py` + 4 tests (28 total). Verified live: rendered 1490 nodes / 673
+  links in a headless browser and screenshotted the result.
+
 ## [0.4.0] — 2026-07-10
 
 The **Graphify meld** — Dewey the librarian gains a cartographer. First wave of the

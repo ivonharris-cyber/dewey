@@ -5,7 +5,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import __version__, core, graph
+from . import __version__, core, graph, brain3d
 
 def _selected(silos, name, want_all):
     """Yield (silo, file) pairs matching a filename, or every file with --all."""
@@ -243,12 +243,25 @@ def cmd_graph(args: argparse.Namespace) -> None:
         raise SystemExit(1)
 
 
+def cmd_brain(args: argparse.Namespace) -> None:
+    library = Path(args.to).resolve()
+    if not library.is_dir():
+        print(f"error: {library} is not a library directory (run sync first)")
+        raise SystemExit(2)
+    out, n, m = brain3d.write_brain(library)
+    print(f"[ok] living 3D brain: {core.portable(out)}")
+    print(f"     {n} nodes, {m} links — nodes coloured by Dewey class, runners flow along every path.")
+    print(f"     Open it in a browser. Each `dewey ask` lights the path it touched (via {brain3d.THOUGHT_JSON}).")
+
+
 def cmd_ask(args: argparse.Namespace) -> None:
     library = Path(args.to).resolve()
     if not library.is_dir():
         print(f"error: {library} is not a library directory (run sync first)")
         raise SystemExit(2)
     res = graph.ask(library, args.question)
+    # Fire the runners: record the path this thought touched so a living 3D brain lights it up.
+    brain3d.write_thought(library, [e.name for e in res.entries[:args.limit]])
     print(f"[{res.mode}] {res.note}\n")
     if not res.entries:
         print("  no entries matched.")
@@ -323,6 +336,10 @@ def main(argv: list[str] | None = None) -> None:
     con.add_argument("--also", help="comma-separated extra literal strings to scrub")
     con.add_argument("--apply", action="store_true", help="write the artery files")
     con.set_defaults(fn=cmd_consolidate)
+
+    brain = sub.add_parser("brain", help="generate a living 3D brain (WebGL force-graph; runners fire on every thought)")
+    brain.add_argument("--to", required=True, help="the library directory created by sync")
+    brain.set_defaults(fn=cmd_brain)
 
     graph_p = sub.add_parser("graph", help="build a queryable knowledge graph over the library (via Graphify; derived cache)")
     graph_p.add_argument("--to", required=True, help="the library directory created by sync")
