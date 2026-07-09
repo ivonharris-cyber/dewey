@@ -2,6 +2,28 @@
 
 All notable changes to Dewey are documented here. This project follows [Semantic Versioning](https://semver.org).
 
+## [0.7.0] — 2026-07-10
+
+The **Ultrawide Cockpit** — Bond's dashboard becomes a real, OS-aware workbench that fits a
+3440×1440 ultrawide and gives the agent situational awareness ("knows its mech").
+
+### Added
+- **4-column ultrawide layout** (avatar/stats · brain · reader · **ops**) + a 5-graph bottom row,
+  sized so it fills the widescreen without stretching and with **readable legends** (no more
+  mouse-wheeling to read ant-sized text).
+- **OS-aware monitoring collector** `BondBrain/bond-ops.ps1` — detects the MECH (OS/CPU/GPU) and
+  samples, writing `bond-ops.json` the page polls: **laptop health** (nvidia-smi GPU util/VRAM/temp/
+  **watts**, CPU, RAM, battery), **servers KV8+KV2** (SSH uptime/RAM/load, hard-bounded by job
+  timeouts), **site uptime** (direct HTTP checks), and **scheduled tasks**. macOS/Linux adapters are
+  stubbed. Verified live at 3440×1440.
+- **Cockpit panels:** a ticking **digital clock**, a **MECH** identity line, host-health gauges
+  (amber/red past thresholds), server + site status dots, a live **GPU·CPU·RAM** line graph, and a
+  **crons/backups** list.
+- **Curiosity** (monitoring-driven) — the collector flags anomalies (GPU spikes, **stale/failed
+  crons**) into the cockpit + a dated `curiosity-log` diary, so Bond can raise them with Ivon.
+- **Voice half-duplex fix** — the voice-agent stays deaf while Bond speaks, and the desktop ignores
+  claps during playback (no mic↔speaker feedback loop).
+
 ## [0.6.0] — 2026-07-10
 
 The **007-Bond cognition dashboard** — the brain becomes a full desktop product, not a

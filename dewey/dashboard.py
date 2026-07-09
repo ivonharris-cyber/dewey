@@ -169,7 +169,7 @@ _TEMPLATE = r"""<!DOCTYPE html>
   html,body { margin:0; height:100%; background:var(--bg); color:var(--ink);
               font-family:var(--font); overflow:hidden; }
   #app { position:fixed; inset:0; display:grid;
-         grid-template-columns:326px 1fr 384px; grid-template-rows:1fr 236px; gap:14px; padding:14px; }
+         grid-template-columns:300px minmax(540px,1fr) 326px 384px; grid-template-rows:1fr 300px; gap:12px; padding:12px; }
   /* reader panel (right) */
   #reader { grid-row:1; grid-column:3; display:flex; flex-direction:column; padding:16px 18px; overflow:hidden; }
   #reader-head { border-bottom:1px solid var(--edge); padding-bottom:11px; margin-bottom:12px; flex:0 0 auto; }
@@ -180,6 +180,27 @@ _TEMPLATE = r"""<!DOCTYPE html>
   #reader-body h4 { color:#fff; font-size:13px; margin:13px 0 3px; }
   #reader-body code { background:rgba(255,255,255,.07); padding:1px 5px; border-radius:5px; color:var(--gold); font-size:11.5px; }
   #reader-body .wl { color:var(--accent); }
+  /* ops / cockpit right column */
+  #ops { grid-row:1; grid-column:4; display:flex; flex-direction:column; padding:14px 15px; gap:11px; overflow:auto; }
+  #clockbox { text-align:center; }
+  #clock-time { font-size:40px; font-weight:600; letter-spacing:.03em; color:#fff; line-height:1; font-variant-numeric:tabular-nums; }
+  #clock-date { font-size:12px; letter-spacing:.2em; color:var(--dim); margin-top:5px; text-transform:uppercase; }
+  #mech { font-size:11px; color:#9aa0b2; text-align:center; letter-spacing:.05em; border-bottom:1px solid var(--edge); padding-bottom:11px; }
+  #mech b { color:#7dd3fc; }
+  .ops-h { font-size:11px; letter-spacing:.16em; color:var(--dim); text-transform:uppercase; margin:2px 0 4px; }
+  .metric { margin:6px 0; }
+  .metric .lab { display:flex; justify-content:space-between; font-size:12px; color:#c3c8d6; margin-bottom:3px; }
+  .metric .lab b { color:#fff; font-variant-numeric:tabular-nums; }
+  .bar { height:7px; border-radius:4px; background:rgba(255,255,255,.08); overflow:hidden; }
+  .bar > span { display:block; height:100%; border-radius:4px; background:#34d399; transition:width .4s, background .4s; }
+  .bar.warn > span { background:#fbbf24; } .bar.crit > span { background:#f87171; }
+  .srv, .site { display:flex; align-items:center; gap:8px; font-size:12.5px; color:#c3c8d6; padding:3px 0; }
+  .dot { width:9px; height:9px; border-radius:50%; flex:0 0 auto; box-shadow:0 0 8px currentColor; }
+  .dot.up { background:#34d399; color:#34d399; } .dot.down { background:#f87171; color:#f87171; }
+  .srv .meta, .site .meta { margin-left:auto; color:var(--dim); font-size:11px; font-variant-numeric:tabular-nums; }
+  #curiosity { margin-top:auto; }
+  #curiosity .c { color:#fbbf24; font-size:11.5px; line-height:1.5; padding:3px 0; }
+  #curiosity .ok { color:#5b6070; font-size:11.5px; }
   .panel { background:var(--panel); border:1px solid var(--edge); border-radius:16px;
            backdrop-filter:blur(9px); }
   /* left column */
@@ -210,7 +231,13 @@ _TEMPLATE = r"""<!DOCTYPE html>
            box-shadow:0 0 12px var(--accent); animation:talk 2.6s ease-in-out infinite; }
   @keyframes talk { 0%,100%{height:5px;} 50%{height:12px;} }
   #avatar .cap { position:absolute; bottom:8px; width:100%; text-align:center; font-size:10px;
-                 letter-spacing:.22em; color:var(--dim); }
+                 letter-spacing:.22em; color:var(--dim); z-index:3; }
+  #avatar.asleep { filter:brightness(.55) saturate(.7); }
+  #zzz { position:absolute; top:12px; right:16px; font-size:17px; font-weight:600; color:#7dd3fc;
+         opacity:0; z-index:4; pointer-events:none; }
+  #avatar.asleep #zzz { animation:zzz 3.6s ease-in-out infinite; }
+  @keyframes zzz { 0%{opacity:0; transform:translateY(6px) scale(.8);} 45%{opacity:.95;}
+                   100%{opacity:0; transform:translateY(-14px) scale(1.1);} }
   /* stats */
   #stats { display:grid; grid-template-columns:1fr 1fr; gap:10px; overflow:auto; }
   .stat { background:rgba(255,255,255,.03); border:1px solid var(--edge); border-radius:12px; padding:11px 12px; }
@@ -242,10 +269,10 @@ _TEMPLATE = r"""<!DOCTYPE html>
   @keyframes kupo { 0%,70%,100%{opacity:0;} 35%{opacity:1;} }
   #brainlabel { position:absolute; left:18px; top:16px; font-size:11px; letter-spacing:.26em; color:var(--dim); }
   /* bottom charts */
-  #charts { grid-row:2; grid-column:1 / -1; display:grid; grid-template-columns:2fr 1fr 1fr; gap:14px; padding:14px; }
+  #charts { grid-row:2; grid-column:1 / -1; display:grid; grid-template-columns:1.6fr 1fr 1fr 1.5fr 1.4fr; gap:14px; padding:14px; }
   .chartbox { position:relative; min-width:0; }
-  .chartbox h4 { margin:0 0 6px; font-size:10px; letter-spacing:.2em; color:var(--dim); text-transform:uppercase; }
-  .chartbox canvas { width:100% !important; height:170px !important; }
+  .chartbox h4 { margin:0 0 9px; font-size:12.5px; letter-spacing:.12em; color:#b3b9c9; text-transform:uppercase; font-weight:600; }
+  .chartbox canvas { width:100% !important; height:214px !important; }
 </style></head>
 <body>
 <div id="app">
@@ -256,6 +283,7 @@ _TEMPLATE = r"""<!DOCTYPE html>
     </div>
     <div id="avatar">
       <div id="face"><div class="eye l"></div><div class="eye r"></div><div class="mouth"></div></div>
+      <div id="zzz">z&nbsp;z&nbsp;z</div>
       <div class="cap">AVATAR · VRM SLOT</div>
     </div>
     <div id="stats"></div>
@@ -277,10 +305,21 @@ _TEMPLATE = r"""<!DOCTYPE html>
     <div id="reader-body">Select any node in the brain to read that memory here — like opening a note in Obsidian. Bodies are scrubbed of secrets.</div>
   </div>
 
+  <div id="ops" class="panel">
+    <div id="clockbox"><div id="clock-time">--:--:--</div><div id="clock-date">&mdash;</div></div>
+    <div id="mech">MECH &middot; <b id="mech-os">detecting&hellip;</b><br><span id="mech-hw"></span></div>
+    <div><div class="ops-h">Host health</div><div id="health"></div></div>
+    <div><div class="ops-h">Servers</div><div id="servers"></div></div>
+    <div><div class="ops-h">Sites</div><div id="sites"></div></div>
+    <div id="curiosity"><div class="ops-h">Curiosity</div><div id="curiosity-list"><div class="ok">warming up&hellip;</div></div></div>
+  </div>
+
   <div id="charts" class="panel">
     <div class="chartbox"><h4>Activity — last 30 active days</h4><canvas id="cTrend"></canvas></div>
     <div class="chartbox"><h4>Output tokens by model</h4><canvas id="cModel"></canvas></div>
     <div class="chartbox"><h4>Memory by class</h4><canvas id="cClass"></canvas></div>
+    <div class="chartbox"><h4>GPU · CPU · RAM — live</h4><canvas id="cOps"></canvas></div>
+    <div class="chartbox"><h4>Crons &amp; backups</h4><div id="cronlist" style="height:214px;overflow:auto"></div></div>
   </div>
 </div>
 
@@ -302,15 +341,27 @@ document.getElementById('stats').innerHTML = [
   ['tokensOut','TOKENS OUT',true],['brainNodes','BRAIN NODES',false],
 ].map(([k,label,g])=>`<div class="stat"><div class="n ${g?'g':''}">${fmt(S[k])}</div><div class="k">${label}</div></div>`).join('');
 const tl = document.getElementById('tasklist');
-(BOND.tasks.length ? BOND.tasks : [{title:'idle — dreaming', status:'pending'}]).slice(0,6).forEach((t,i)=>{
-  const running = (t.status||'in_progress') === 'in_progress';
-  const d=document.createElement('div'); d.className='task'+(running?'':' pending');
-  d.innerHTML=`<span class="wheel" style="--dur:${(2.2+i*0.7).toFixed(1)}s"></span>${(t.title||t.subject||'task').slice(0,40)}`;
-  tl.appendChild(d);
-});
+const TOOL_VERB={Read:'reading',Edit:'editing',Write:'writing',MultiEdit:'editing',Bash:'running',PowerShell:'running',
+  Grep:'searching',Glob:'finding',WebSearch:'searching the web',WebFetch:'fetching',Task:'delegating an agent',
+  TaskUpdate:'tracking',TaskCreate:'planning',mcp:'using a tool'};
+let thoughts=[];
+function renderThoughts(){
+  tl.innerHTML='';
+  const list = thoughts.length ? thoughts : [{live:false, g:'resting — waiting for you'}];
+  list.slice(0,6).forEach((th,i)=>{ const d=document.createElement('div');
+    d.className='task'+(th.live?'':' pending');
+    d.innerHTML='<span class="wheel" style="--dur:'+(2.0+i*0.6).toFixed(1)+'s"></span>'+th.g;
+    tl.appendChild(d); });
+}
+function pushThought(a){
+  const verb=TOOL_VERB[(a.tool||'').split('__')[0]] || (a.tool||'thinking');
+  thoughts.unshift({live:true, g:(verb + (a.target ? ' · '+a.target : '')).slice(0,44)});
+  thoughts = thoughts.slice(0,6); renderThoughts();
+}
+renderThoughts();
 
 /* ---------- charts ---------- */
-Chart.defaults.color = '#8b90a4'; Chart.defaults.font.family = "'Segoe UI',system-ui,sans-serif";
+Chart.defaults.color = '#a2a8ba'; Chart.defaults.font.family = "'Segoe UI',system-ui,sans-serif"; Chart.defaults.font.size = 12.5;
 const grid = { color:'rgba(140,150,190,.08)' };
 new Chart(document.getElementById('cTrend'), {
   type:'line',
@@ -321,19 +372,66 @@ new Chart(document.getElementById('cTrend'), {
       { label:'tool calls', data:BOND.trend.map(d=>d.tools), borderColor:'#fbbf24',
         backgroundColor:'rgba(251,191,36,.08)', fill:true, tension:.4, pointRadius:0, borderWidth:2 },
     ]},
-  options:{ responsive:false, plugins:{legend:{labels:{boxWidth:10,font:{size:9}}}},
-    scales:{ x:{grid, ticks:{maxTicksLimit:8,font:{size:8}}}, y:{grid, ticks:{font:{size:8}}}}}
+  options:{ responsive:false, maintainAspectRatio:false, plugins:{legend:{labels:{boxWidth:12,font:{size:12}}}},
+    scales:{ x:{grid, ticks:{maxTicksLimit:7,font:{size:11}}}, y:{grid, ticks:{font:{size:11}}}}}
 });
 const doughnut = (id, labels, values, colors) => new Chart(document.getElementById(id), {
   type:'doughnut',
   data:{ labels, datasets:[{ data:values, backgroundColor:colors, borderColor:'#06070c', borderWidth:2 }]},
-  options:{ responsive:false, cutout:'60%',
-    plugins:{legend:{position:'bottom',labels:{boxWidth:8,padding:7,font:{size:9}}}}}
+  options:{ responsive:false, maintainAspectRatio:false, cutout:'58%',
+    plugins:{legend:{position:'bottom',labels:{boxWidth:11,padding:9,font:{size:11}}}}}
 });
 doughnut('cModel', BOND.modelTokens.map(m=>m.model), BOND.modelTokens.map(m=>m.out),
   ['#a78bfa','#7dd3fc','#f472b6','#fbbf24','#34d399','#60a5fa']);
 doughnut('cClass', BOND.classDist.map(c=>c.klass.replace(/^\d+-/,'')), BOND.classDist.map(c=>c.count),
   BOND.classDist.map(c=>c.color));
+
+/* ===== cockpit ops (bond-ops.json) + digital clock ===== */
+const clockTime=document.getElementById('clock-time'), clockDate=document.getElementById('clock-date');
+function tickClock(){ const d=new Date();
+  clockTime.textContent=d.toLocaleTimeString([], {hour12:false});
+  clockDate.textContent=d.toLocaleDateString([], {weekday:'long', day:'numeric', month:'short'}); }
+setInterval(tickClock,1000); tickClock();
+
+const mechOs=document.getElementById('mech-os'), mechHw=document.getElementById('mech-hw');
+const healthEl=document.getElementById('health'), serversEl=document.getElementById('servers'),
+      sitesEl=document.getElementById('sites'), curiosityEl=document.getElementById('curiosity-list'),
+      cronEl=document.getElementById('cronlist');
+function bar(label,val,pct,warn,crit){ let cls=''; if(crit&&pct>=crit)cls='crit'; else if(warn&&pct>=warn)cls='warn';
+  return '<div class="metric"><div class="lab"><span>'+label+'</span><b>'+val+'</b></div><div class="bar '+cls+'"><span style="width:'+Math.max(2,Math.min(100,pct))+'%"></span></div></div>'; }
+let cOps=null;
+function renderOps(o){
+  if(o.mech){ mechOs.textContent=o.mech.os||'?'; mechHw.textContent=((o.mech.gpu||'').replace('NVIDIA GeForce ','')||o.mech.cpu||''); }
+  const L=o.laptop||{}; let h='';
+  if(L.cpu!=null) h+=bar('CPU', L.cpu+'%', L.cpu, 70, 90);
+  if(L.ram&&L.ram.totalMB) h+=bar('RAM', (L.ram.usedMB/1024).toFixed(1)+' / '+(L.ram.totalMB/1024).toFixed(0)+'G', 100*L.ram.usedMB/L.ram.totalMB, 75, 92);
+  if(L.gpu&&L.gpu.ok){ h+=bar('GPU', L.gpu.util+'%', L.gpu.util, 70, 88);
+    h+=bar('GPU '+Math.round(L.gpu.watts)+'W · '+Math.round(L.gpu.temp)+'°C', (L.gpu.memUsed/1024).toFixed(1)+' / '+(L.gpu.memTotal/1024).toFixed(0)+'G VRAM', 100*L.gpu.memUsed/L.gpu.memTotal, 80, 95); }
+  if(L.battery&&L.battery.pct!=null) h+=bar('Battery'+(L.battery.charging?' ⚡':''), L.battery.pct+'%', L.battery.pct, 0, 0);
+  healthEl.innerHTML=h||'<div class="ok">n/a</div>';
+  serversEl.innerHTML=(o.servers||[]).map(s=>'<div class="srv"><span class="dot '+(s.up?'up':'down')+'"></span>'+s.name+
+    '<span class="meta">'+(s.up?(s.days+'d · '+(s.ram&&s.ram.totalMB?Math.round(100*s.ram.usedMB/s.ram.totalMB)+'% ram':'')+' · load '+(s.load!=null?s.load:'?')):'down')+'</span></div>').join('')||'<div class="ok">n/a</div>';
+  sitesEl.innerHTML=(o.sites||[]).map(s=>'<div class="site"><span class="dot '+(s.up?'up':'down')+'"></span>'+s.name+
+    '<span class="meta">'+(s.up?s.ms+'ms':'HTTP '+s.code)+'</span></div>').join('')||'<div class="ok">n/a</div>';
+  const cur=o.curiosity||[];
+  curiosityEl.innerHTML=cur.length?cur.map(c=>'<div class="c">⚠ '+c+'</div>').join(''):'<div class="ok">all quiet — nothing unusual</div>';
+  cronEl.innerHTML=(o.crons||[]).map(c=>'<div class="srv"><span class="dot '+(c.stale?'down':'up')+'"></span>'+String(c.name).slice(0,26)+
+    '<span class="meta">'+(c.last==='never'?'never':c.ageDays+'d')+'</span></div>').join('')||'<div class="ok">no tasks</div>';
+  if(o.history&&o.history.length){
+    const labels=o.history.map(p=>p.t), g=o.history.map(p=>p.gpu), c=o.history.map(p=>p.cpu), r=o.history.map(p=>p.ram);
+    if(!cOps){ cOps=new Chart(document.getElementById('cOps'),{ type:'line',
+      data:{labels, datasets:[
+        {label:'GPU%',data:g,borderColor:'#34d399',backgroundColor:'rgba(52,211,153,.12)',fill:true,tension:.35,pointRadius:0,borderWidth:2},
+        {label:'CPU%',data:c,borderColor:'#7dd3fc',fill:false,tension:.35,pointRadius:0,borderWidth:2},
+        {label:'RAM%',data:r,borderColor:'#fbbf24',fill:false,tension:.35,pointRadius:0,borderWidth:2}]},
+      options:{responsive:false,maintainAspectRatio:false,animation:false,
+        plugins:{legend:{labels:{boxWidth:12,font:{size:11}}}},
+        scales:{x:{grid,ticks:{maxTicksLimit:6,font:{size:10}}},y:{grid,min:0,max:100,ticks:{font:{size:10}}}}}}); }
+    else { cOps.data.labels=labels; cOps.data.datasets[0].data=g; cOps.data.datasets[1].data=c; cOps.data.datasets[2].data=r; cOps.update('none'); }
+  }
+}
+async function pollOps(){ try{ const r=await fetch('bond-ops.json?t='+Date.now(),{cache:'no-store'}); if(r.ok) renderOps(await r.json()); }catch(e){} }
+setInterval(pollOps, 5000); pollOps();
 
 /* ---------- the colourful neural brain ---------- */
 const host = document.getElementById('brain');
@@ -453,6 +551,7 @@ scene.add(new THREE.Points(pg, new THREE.PointsMaterial({ size:9, map:SPRITE, ve
 
 const thinkEl=document.getElementById('think'); thinkEl.innerHTML='resting &mdash; brain healthy';
 let mood=0; // 0 rest .. 1 firing
+let asleep=true, lastActive=0;   // Bond naps until a clap or real activity wakes him
 
 // find memory nodes whose label matches what the tool touched, and light them
 function lightMatch(text){
@@ -479,7 +578,7 @@ async function pollActivity(){
       const ic=TOOL_ICON[(a.tool||'').split('__')[0]]||'⚡';
       thinkEl.innerHTML=`<b>${ic} ${a.tool||'thinking'}</b>`+(a.target?`<br>${a.target}`:'');
       lightMatch(a.target||a.tool);
-      avatarSpeak(a);
+      avatarSpeak(a); wake(); pushThought(a);
       clearTimeout(restT);
       restT=setTimeout(()=>{ mood=0; thinkEl.innerHTML='resting &mdash; brain healthy'; }, 2600);
     } else if(a.state==='listening' && a.seq===lastSeq){
@@ -544,7 +643,7 @@ setInterval(()=>{ if(mood===0 && Math.random()<0.5) lightMatch(nodes[(Math.rando
 
 function animate(){
   requestAnimationFrame(animate);
-  const fire = mood + activeGlow*0.4;            // idle keeps a healthy baseline of flow
+  const fire = (mood + activeGlow*0.4) * (asleep?0.32:1);   // dim while napping, full when awake
   for(let i=0;i<NP;i++){ const p=pulses[i]; p.t += p.sp*(1 + fire*1.6);
     if(p.t>=1){ seed(p, activeGlow>0.15); }
     const a=nodes[p.a], b=nodes[p.b], t=p.t;
@@ -578,7 +677,7 @@ new ResizeObserver(aResize).observe(aHost); aResize();
 
 let vrm=null; const aClock=new THREE.Clock();
 let talk=0, gesture=null, gT=0, happy=0, blinkT=2+Math.random()*3;
-let sCtx=null, sAudio=null, sAnalyser=null, sData=null, lastSpeech=-1, speaking=false;
+let sCtx=null, sAudio=null, sAnalyser=null, sData=null, lastSpeech=-1, speaking=false, mouthAmp=0;
 const vLoader=new GLTFLoader(); vLoader.register(p=>new VRMLoaderPlugin(p));
 vLoader.load('vendor/avatar-alt.vrm', (gltf)=>{
   vrm=gltf.userData.vrm;
@@ -588,7 +687,7 @@ vLoader.load('vendor/avatar-alt.vrm', (gltf)=>{
 }, undefined, (e)=>{ if(aCap) aCap.textContent='avatar load failed'; console.log('vrm error', e); });
 
 function setX(name,v){ if(vrm){ try{ vrm.expressionManager.setValue(name, v); }catch(e){} } }
-function avatarSpeak(a){ talk=2.4; gesture='nod'; gT=0.8; happy=Math.min(1, happy+0.55); }
+function avatarSpeak(a){ gesture='nod'; gT=0.8; happy=Math.min(1, happy+0.5); }  // nod+smile only; the MOUTH moves solely to real speech audio
 function avatarListen(){ talk=0; }
 function avatarNo(){ gesture='shake'; gT=0.9; }   // reserved: "no"
 
@@ -599,6 +698,12 @@ function avatarAnimate(){
     const t=performance.now()/1000;
     const head=vrm.humanoid.getNormalizedBoneNode('head');
     const spine=vrm.humanoid.getNormalizedBoneNode('spine');
+    if(asleep){   // napping peacefully: chin down, eyes closed, slow breathing
+      if(head) head.rotation.set(0.36, 0.12, Math.sin(t*0.5)*0.02);
+      if(spine) spine.rotation.x=0.09+Math.sin(t*0.4)*0.015;
+      setX('blink',1); setX('aa',0); setX('happy',0); setX('relaxed',0.45);
+      vrm.update(dt); aRenderer.render(aScene, aCam); return;
+    }
     if(spine) spine.rotation.y=Math.sin(t*0.6)*0.03;
     if(head){ head.rotation.set(0,0,Math.sin(t*0.9)*0.02);
       if(gesture && gT>0){ gT-=dt; const s=Math.sin((0.8-gT)/0.8*Math.PI*2)*Math.max(0,gT);
@@ -608,11 +713,13 @@ function avatarAnimate(){
     if(blinkT<0.14) blink=1-Math.min(1,Math.abs(blinkT)/0.14);
     if(blinkT<0) blinkT=2.4+Math.random()*3.4;
     setX('blink', Math.max(0,blink));
+    // lipsync: ONLY to Bond's real speech audio (RMS of the playing waveform)
     if(speaking && sAnalyser){ sAnalyser.getByteTimeDomainData(sData); let s=0;
       for(let i=0;i<sData.length;i++){ const v=(sData[i]-128)/128; s+=v*v; }
-      setX('aa', Math.min(1, Math.sqrt(s/sData.length)*3.6)*0.8); happy=Math.max(happy,0.25); }
-    else if(talk>0){ talk-=dt; setX('aa', Math.abs(Math.sin(t*13))*0.5+0.12); }
-    else setX('aa',0);
+      const amp=Math.min(1, Math.sqrt(s/sData.length)*5.2);
+      mouthAmp += (amp - mouthAmp)*0.55; happy=Math.max(happy,0.2); }
+    else { mouthAmp += (0 - mouthAmp)*0.4; }
+    setX('aa', mouthAmp*0.92); setX('ih', mouthAmp*0.22);
     happy=Math.max(0, happy-dt*0.14); setX('happy', happy*0.7); setX('relaxed', 0.15);
     vrm.update(dt);
   }
@@ -645,12 +752,20 @@ async function initWake(){ try{
   src.connect(an); const buf=new Uint8Array(an.fftSize);
   (function tick(){ requestAnimationFrame(tick); an.getByteTimeDomainData(buf);
     let peak=0; for(let i=0;i<buf.length;i++){ const v=Math.abs(buf[i]-128); if(v>peak) peak=v; }
-    if(peak>74 && wakeArmed){ wakeArmed=false; setTimeout(()=>wakeArmed=true,150);
+    if(peak>74 && wakeArmed && !speaking){ wakeArmed=false; setTimeout(()=>wakeArmed=true,150);  // ignore Bond's own voice (half-duplex)
       const now=performance.now(); if(now-lastClap<650) wake(); lastClap=now; }
   })();
 }catch(e){ if(aCap) aCap.textContent='BOND · allow mic to clap-wake'; } }
-function wake(){ happy=0.9; gesture='nod'; gT=0.8; if(aCap) aCap.textContent='BOND · awake, listening';
-  thinkEl.innerHTML='<b>awake — listening</b>'; try{ if(sCtx) sCtx.resume(); }catch(e){} }
+function wake(){ lastActive=performance.now(); if(!asleep) return;
+  asleep=false; aHost.classList.remove('asleep'); happy=0.95; gesture='nod'; gT=0.85;
+  if(aCap) aCap.textContent='BOND · awake'; thinkEl.innerHTML='<b>awake</b>';
+  try{ if(sCtx) sCtx.resume(); }catch(e){} }
+function nap(){ if(asleep) return; asleep=true; aHost.classList.add('asleep');
+  if(aCap) aCap.textContent='BOND · asleep'; thinkEl.innerHTML='&#128564; asleep &mdash; double-clap to wake'; }
+setInterval(()=>{ if(!asleep && !speaking && performance.now()-lastActive>45000) nap(); }, 4000);
+// start asleep — napping peacefully until a clap or activity
+aHost.classList.add('asleep'); if(aCap) aCap.textContent='BOND · asleep';
+thinkEl.innerHTML='&#128564; asleep &mdash; double-clap to wake';
 initWake();
 
 avatarAnimate();
