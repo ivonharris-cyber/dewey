@@ -5,6 +5,10 @@ All notable changes to Dewey are documented here. This project follows [Semantic
 ## [0.7.1] — 2026-07-10
 
 ### Fixed
+- **Avatar no longer naps mid-work** — the nap trigger fired after just 45 s idle, so the avatar
+  fell "asleep" during gaps between tool calls and while waiting for Ivon's input. Raised to 5 min
+  of real silence; any activity/speech/clap still wakes it instantly. (Stopgap — the real fix is
+  state-driven working/attentive/idle.)
 - **Cast voice restored** — the kupos/kuma SFX (`roar`, `chaching`, `alert`, `pulse`, `bill`) had
   been muted to no-ops in an earlier working edit and that mute was committed under a mislabeled
   "refactor" (`616f10b`). Restored the Web Audio synth helpers (`sfxA`/`tone`/`noise`) and the

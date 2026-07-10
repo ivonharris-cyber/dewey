@@ -831,7 +831,9 @@ function wake(){ lastActive=performance.now(); if(!asleep) return;
   try{ if(sCtx) sCtx.resume(); }catch(e){} }
 function nap(){ if(asleep) return; asleep=true; aHost.classList.add('asleep');
   if(aCap) aCap.textContent='BOND · asleep'; thinkEl.innerHTML='&#128564; asleep &mdash; double-clap to wake'; }
-setInterval(()=>{ if(!asleep && !speaking && !agentsActive && performance.now()-lastActive>45000) nap(); }, 4000);
+// nap only on REAL idle (5 min of total silence) — waiting for you or a gap between tool
+// calls is NOT sleeping. Any activity/speech/clap wakes it instantly.
+setInterval(()=>{ if(!asleep && !speaking && !agentsActive && performance.now()-lastActive>300000) nap(); }, 4000);
 // start asleep — napping peacefully until a clap or activity
 aHost.classList.add('asleep'); if(aCap) aCap.textContent='BOND · asleep';
 thinkEl.innerHTML='&#128564; asleep &mdash; double-clap to wake';
