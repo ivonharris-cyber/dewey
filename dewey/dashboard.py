@@ -735,6 +735,7 @@ function avatarAnimate(){
 /* Bond talks back — play the edge-tts reply + lipsync from real audio amplitude */
 function playSpeech(){ try{
   if(!sCtx) sCtx=new (window.AudioContext||window.webkitAudioContext)();
+  if(sAudio){ try{ sAudio.pause(); sAudio.currentTime=0; }catch(e){} }   // stop any prior clip so it never doubles/echoes
   sAudio=new Audio('bond-speech.mp3?t='+Date.now());
   const src=sCtx.createMediaElementSource(sAudio);
   sAnalyser=sCtx.createAnalyser(); sAnalyser.fftSize=256; sData=new Uint8Array(sAnalyser.fftSize);
