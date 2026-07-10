@@ -28,9 +28,65 @@ def _stem(name: str) -> str:
     return Path(name.strip()).stem.lower()
 
 
+# Archive / retired directories: their notes still exist on disk (and `dewey ask`
+# still reaches them), but they are PRUNED from the living brain view — a display
+# concern, not forgetting. Any directory whose name starts with "_" counts, plus
+# these explicit ones. Matched against directory parts, NOT the filename.
+_ARCHIVE_DIRS = {"archive", "retired", "trash", "old", "deprecated"}
+
+
+def _is_archived(entry_path: Path, library: Path) -> bool:
+    """True if the entry lives under an archive/retired directory (any depth)."""
+    try:
+        rel = entry_path.relative_to(library)
+    except ValueError:
+        return False
+    return any(part.startswith("_") or part.lower() in _ARCHIVE_DIRS
+               for part in rel.parts[:-1])  # parts[:-1] = directories, excluding the filename
+
+
+def _bond_orphans(nodes: list[dict], links: list[dict]) -> list[dict]:
+    """The bonding law — no solo nodes. Every node with zero resolved wikilinks gets
+    ONE inferred edge to a same-class anchor (preferring an already-connected peer), so
+    the living set has no orphans. Inferred edges carry `inferred: True` so the viewer
+    can render them fainter than real wikilinks."""
+    if not nodes:
+        return links
+    deg: dict[str, int] = {n["id"]: 0 for n in nodes}
+    for l in links:
+        deg[l["source"]] = deg.get(l["source"], 0) + 1
+        deg[l["target"]] = deg.get(l["target"], 0) + 1
+
+    by_class: dict[str, list[dict]] = {}
+    for n in nodes:
+        by_class.setdefault(n["klass"], []).append(n)
+
+    inferred: list[dict] = []
+    for orphan in [n for n in nodes if deg[n["id"]] == 0]:
+        peers = [n for n in by_class.get(orphan["klass"], []) if n["id"] != orphan["id"]]
+        connected = [p for p in peers if deg[p["id"]] > 0]
+        if connected:
+            anchor = max(connected, key=lambda p: deg[p["id"]])["id"]
+        elif peers:
+            anchor = max(peers, key=lambda p: deg[p["id"]])["id"]  # bond same-class orphans into a cluster
+        else:
+            other = [n for n in nodes if n["id"] != orphan["id"]]
+            anchor = max(other, key=lambda p: deg[p["id"]])["id"] if other else None
+        if anchor:
+            inferred.append({"source": orphan["id"], "target": anchor, "inferred": True})
+            deg[orphan["id"]] += 1
+            deg[anchor] += 1
+    return links + inferred
+
+
 def extract_graph(library: Path) -> dict:
-    """Nodes (entries, coloured by class) + links (resolved wikilinks) from the library."""
-    entries = core.library_entries(library)
+    """Nodes (entries, coloured by class) + links (resolved wikilinks) from the library.
+
+    Archive/retired directories are PRUNED from the view; every remaining orphan is
+    REWIRED with an inferred edge so no node is solo (the bonding law)."""
+    library = Path(library)
+    entries = [e for e in core.library_entries(library)
+               if not _is_archived(e.path, library)]          # prune the junk
     by_stem: dict[str, core.Entry] = {_stem(e.name): e for e in entries}
 
     nodes = []
@@ -59,6 +115,7 @@ def extract_graph(library: Path) -> dict:
                     seen.add(key)
                     links.append({"source": e.name, "target": tgt.name})
 
+    links = _bond_orphans(nodes, links)                        # rewire the rest
     return {"nodes": nodes, "links": links}
 
 

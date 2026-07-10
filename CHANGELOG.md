@@ -2,6 +2,23 @@
 
 All notable changes to Dewey are documented here. This project follows [Semantic Versioning](https://semver.org).
 
+## [0.7.1] — 2026-07-10
+
+### Fixed
+- **Cast voice restored** — the kupos/kuma SFX (`roar`, `chaching`, `alert`, `pulse`, `bill`) had
+  been muted to no-ops in an earlier working edit and that mute was committed under a mislabeled
+  "refactor" (`616f10b`). Restored the Web Audio synth helpers (`sfxA`/`tone`/`noise`) and the
+  sounded SFX so the cast is audible again, pending the real audio clips.
+
+### Changed
+- **Brain graph — prune + rewire (the bonding law):** `extract_graph` now (a) **prunes**
+  archive/retired directories from the view (any dir whose name starts with `_`, plus
+  `archive`/`retired`/`trash`/`old`/`deprecated`), and (b) **rewires** every orphan node with one
+  inferred same-class edge so no node is solo. Verified on the live library: 532 nodes → **0
+  orphans**. Pruning is graph-only; `dewey ask`/search still reach archived notes.
+- **Cast persists until the next scene** — removed the blind 8.8 s `clearCast()` guillotine; the
+  kupos/kuma now stay on screen after their scene and are cleared only when the next event fires.
+
 ## [0.7.0] — 2026-07-10
 
 The **Ultrawide Cockpit** — Bond's dashboard becomes a real, OS-aware workbench that fits a

@@ -460,16 +460,24 @@ const SVG_BONITA=`<svg width="46" height="46" viewBox="0 0 46 46"><path d="M9 20
 function castSay(svg, html){ const d=document.createElement('div'); d.className='cast-line'; d.innerHTML=svg+'<span class="say">'+html+'</span>'; castEl.appendChild(d); return d; }
 function clearCast(){ castEl.innerHTML=''; }
 
-// synth SFX OFF — real audio files get wired in later, no cheap noises
-const SFX={ roar(){}, chaching(){}, alert(){}, pulse(){}, bill(){} };
+let sfxCtx=null;
+function sfxA(){ if(!sfxCtx) sfxCtx=new (window.AudioContext||window.webkitAudioContext)(); if(sfxCtx.state==='suspended') sfxCtx.resume(); return sfxCtx; }
+function tone(freq,dur,type,vol,slideTo){ const c=sfxA(); const o=c.createOscillator(),g=c.createGain(); o.type=type||'sine'; o.frequency.setValueAtTime(freq,c.currentTime); if(slideTo) o.frequency.exponentialRampToValueAtTime(slideTo,c.currentTime+dur); g.gain.setValueAtTime(vol||0.15,c.currentTime); g.gain.exponentialRampToValueAtTime(0.0005,c.currentTime+dur); o.connect(g); g.connect(c.destination); o.start(); o.stop(c.currentTime+dur); }
+function noise(dur,vol){ const c=sfxA(); const b=c.createBuffer(1,Math.floor(c.sampleRate*dur),c.sampleRate); const d=b.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*(1-i/d.length); const s=c.createBufferSource(); s.buffer=b; const f=c.createBiquadFilter(); f.type='lowpass'; f.frequency.value=520; const g=c.createGain(); g.gain.value=vol||0.3; s.connect(f); f.connect(g); g.connect(c.destination); s.start(); }
+const SFX={ roar(){ noise(0.55,0.35); tone(95,0.5,'sawtooth',0.14,55); },
+  chaching(){ tone(880,0.08,'square',0.18); setTimeout(()=>tone(1320,0.2,'square',0.18),90); },
+  alert(){ tone(660,0.12,'square',0.16); setTimeout(()=>tone(440,0.16,'square',0.16),150); },
+  pulse(){ tone(240,0.12,'sine',0.08,180); }, bill(){ tone(520,0.1,'triangle',0.14); setTimeout(()=>tone(390,0.15,'triangle',0.14),110); } };
 
 // the story: something DOWN -> bear GRR -> Bonita (Slack + Chewy) -> Chewy roars
 let storyDown=new Set(), storyBusy=false;
-function alertStory(name){ if(storyBusy) return; storyBusy=true; clearCast();
+function alertStory(name){ if(storyBusy) return; storyBusy=true; clearCast();  // clear only when a NEW story begins
   SFX.roar(); castSay(SVG_BEAR, '<b>GRRR!</b> '+name+' just went DOWN!');
   setTimeout(()=>castSay(SVG_BONITA, "Thanks — I'll pop that on the Slack board and get Chewy on it."), 1700);
   setTimeout(()=>{ SFX.roar(); castSay(SVG_CHEWY, "<b>RRRAGH!</b> Chewy's seen the task — on it, captain!"); }, 3600);
-  setTimeout(()=>{ clearCast(); storyBusy=false; }, 8800); }
+  // the kupos PERSIST once the scene plays — no blind guillotine. Only lift the lock so the next
+  // down-event can fire (and that next story is what clears them). Real audio later: gate on 'ended'.
+  setTimeout(()=>{ storyBusy=false; }, 6000); }
 function checkOps(o){ const downs=new Set();
   (o.sites||[]).forEach(s=>{ if(s&&!s.up) downs.add('site '+s.name); });
   (o.servers||[]).forEach(s=>{ if(s&&!s.up) downs.add(s.name); });
