@@ -115,6 +115,13 @@ def assemble_data(library: Path, claude_dir: Path, out_dir: Path) -> dict:
         for k, v in sorted(model_usage.items(), key=lambda kv: -kv[1].get("outputTokens", 0))
     ]
     class_dist = Counter(n["klass"] for n in graph["nodes"])
+    _PALETTE = ["#22d3ee", "#f472b6", "#a78bfa", "#34d399", "#60a5fa", "#fbbf24", "#fb7185", "#818cf8"]
+    _mc = class_dist.most_common()
+    class_top = [{"klass": k.replace("-", " "), "count": c, "color": _PALETTE[i % len(_PALETTE)]}
+                 for i, (k, c) in enumerate(_mc[:8])]
+    _other = sum(c for _, c in _mc[8:])
+    if _other:
+        class_top.append({"klass": "other", "count": _other, "color": "#6b7280"})
 
     return {
         "nodes": graph["nodes"],
@@ -132,8 +139,7 @@ def assemble_data(library: Path, claude_dir: Path, out_dir: Path) -> dict:
         },
         "trend": trend,
         "modelTokens": model_tokens,
-        "classDist": [{"klass": k, "count": c, "color": _VIVID.get(k, _FALLBACK)}
-                      for k, c in class_dist.most_common()],
+        "classDist": class_top,
         "tasks": _load_tasks(out_dir),
     }
 
@@ -271,8 +277,8 @@ _TEMPLATE = r"""<!DOCTYPE html>
   /* bottom charts */
   #charts { grid-row:2; grid-column:1 / -1; display:grid; grid-template-columns:1.6fr 1fr 1fr 1.5fr 1.4fr; gap:14px; padding:14px; }
   .chartbox { position:relative; min-width:0; }
-  .chartbox h4 { margin:0 0 9px; font-size:12.5px; letter-spacing:.12em; color:#b3b9c9; text-transform:uppercase; font-weight:600; }
-  .chartbox canvas { width:100% !important; height:214px !important; }
+  .chartbox h4 { margin:0 0 9px; font-size:14px; letter-spacing:.1em; color:#c3c8d6; text-transform:uppercase; font-weight:600; }
+  .chartbox canvas { width:100% !important; height:222px !important; }
 </style></head>
 <body>
 <div id="app">
@@ -361,7 +367,7 @@ function pushThought(a){
 renderThoughts();
 
 /* ---------- charts ---------- */
-Chart.defaults.color = '#a2a8ba'; Chart.defaults.font.family = "'Segoe UI',system-ui,sans-serif"; Chart.defaults.font.size = 12.5;
+Chart.defaults.color = '#c3c8d6'; Chart.defaults.font.family = "'Segoe UI',system-ui,sans-serif"; Chart.defaults.font.size = 15;
 const grid = { color:'rgba(140,150,190,.08)' };
 new Chart(document.getElementById('cTrend'), {
   type:'line',
@@ -372,14 +378,14 @@ new Chart(document.getElementById('cTrend'), {
       { label:'tool calls', data:BOND.trend.map(d=>d.tools), borderColor:'#fbbf24',
         backgroundColor:'rgba(251,191,36,.08)', fill:true, tension:.4, pointRadius:0, borderWidth:2 },
     ]},
-  options:{ responsive:false, maintainAspectRatio:false, plugins:{legend:{labels:{boxWidth:12,font:{size:12}}}},
-    scales:{ x:{grid, ticks:{maxTicksLimit:7,font:{size:11}}}, y:{grid, ticks:{font:{size:11}}}}}
+  options:{ responsive:false, maintainAspectRatio:false, plugins:{legend:{labels:{boxWidth:16,font:{size:14}}}},
+    scales:{ x:{grid, ticks:{maxTicksLimit:7,font:{size:13}}}, y:{grid, ticks:{font:{size:13}}}}}
 });
 const doughnut = (id, labels, values, colors) => new Chart(document.getElementById(id), {
   type:'doughnut',
   data:{ labels, datasets:[{ data:values, backgroundColor:colors, borderColor:'#06070c', borderWidth:2 }]},
-  options:{ responsive:false, maintainAspectRatio:false, cutout:'58%',
-    plugins:{legend:{position:'bottom',labels:{boxWidth:11,padding:9,font:{size:11}}}}}
+  options:{ responsive:false, maintainAspectRatio:true, cutout:'60%',
+    plugins:{legend:{position:'right',labels:{boxWidth:15,padding:11,font:{size:14}}}}}
 });
 doughnut('cModel', BOND.modelTokens.map(m=>m.model), BOND.modelTokens.map(m=>m.out),
   ['#a78bfa','#7dd3fc','#f472b6','#fbbf24','#34d399','#60a5fa']);
@@ -425,8 +431,8 @@ function renderOps(o){
         {label:'CPU%',data:c,borderColor:'#7dd3fc',fill:false,tension:.35,pointRadius:0,borderWidth:2},
         {label:'RAM%',data:r,borderColor:'#fbbf24',fill:false,tension:.35,pointRadius:0,borderWidth:2}]},
       options:{responsive:false,maintainAspectRatio:false,animation:false,
-        plugins:{legend:{labels:{boxWidth:12,font:{size:11}}}},
-        scales:{x:{grid,ticks:{maxTicksLimit:6,font:{size:10}}},y:{grid,min:0,max:100,ticks:{font:{size:10}}}}}}); }
+        plugins:{legend:{labels:{boxWidth:16,font:{size:14}}}},
+        scales:{x:{grid,ticks:{maxTicksLimit:6,font:{size:13}}},y:{grid,min:0,max:100,ticks:{font:{size:13}}}}}}); }
     else { cOps.data.labels=labels; cOps.data.datasets[0].data=g; cOps.data.datasets[1].data=c; cOps.data.datasets[2].data=r; cOps.update('none'); }
   }
 }
