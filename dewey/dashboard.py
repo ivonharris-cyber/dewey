@@ -460,14 +460,8 @@ const SVG_BONITA=`<svg width="46" height="46" viewBox="0 0 46 46"><path d="M9 20
 function castSay(svg, html){ const d=document.createElement('div'); d.className='cast-line'; d.innerHTML=svg+'<span class="say">'+html+'</span>'; castEl.appendChild(d); return d; }
 function clearCast(){ castEl.innerHTML=''; }
 
-let sfxCtx=null;
-function sfxA(){ if(!sfxCtx) sfxCtx=new (window.AudioContext||window.webkitAudioContext)(); if(sfxCtx.state==='suspended') sfxCtx.resume(); return sfxCtx; }
-function tone(freq,dur,type,vol,slideTo){ const c=sfxA(); const o=c.createOscillator(),g=c.createGain(); o.type=type||'sine'; o.frequency.setValueAtTime(freq,c.currentTime); if(slideTo) o.frequency.exponentialRampToValueAtTime(slideTo,c.currentTime+dur); g.gain.setValueAtTime(vol||0.15,c.currentTime); g.gain.exponentialRampToValueAtTime(0.0005,c.currentTime+dur); o.connect(g); g.connect(c.destination); o.start(); o.stop(c.currentTime+dur); }
-function noise(dur,vol){ const c=sfxA(); const b=c.createBuffer(1,Math.floor(c.sampleRate*dur),c.sampleRate); const d=b.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*(1-i/d.length); const s=c.createBufferSource(); s.buffer=b; const f=c.createBiquadFilter(); f.type='lowpass'; f.frequency.value=520; const g=c.createGain(); g.gain.value=vol||0.3; s.connect(f); f.connect(g); g.connect(c.destination); s.start(); }
-const SFX={ roar(){ noise(0.55,0.35); tone(95,0.5,'sawtooth',0.14,55); },
-  chaching(){ tone(880,0.08,'square',0.18); setTimeout(()=>tone(1320,0.2,'square',0.18),90); },
-  alert(){ tone(660,0.12,'square',0.16); setTimeout(()=>tone(440,0.16,'square',0.16),150); },
-  pulse(){ tone(240,0.12,'sine',0.08,180); }, bill(){ tone(520,0.1,'triangle',0.14); setTimeout(()=>tone(390,0.15,'triangle',0.14),110); } };
+// synth SFX OFF — real audio files get wired in later, no cheap noises
+const SFX={ roar(){}, chaching(){}, alert(){}, pulse(){}, bill(){} };
 
 // the story: something DOWN -> bear GRR -> Bonita (Slack + Chewy) -> Chewy roars
 let storyDown=new Set(), storyBusy=false;
@@ -485,7 +479,7 @@ function checkOps(o){ const downs=new Set();
 
 // Pink-Panther-ish sneak loop while agents (Explore) are working
 let sneaky=null;
-function sneakyStart(){ if(sneaky) return; const n=[311,0,349,311,0,392,0,466]; let i=0; sneaky=setInterval(()=>{ const f=n[i%n.length]; if(f) tone(f,0.16,'triangle',0.05); i++; }, 260); }
+function sneakyStart(){ /* synth sneak-loop OFF — real audio later */ }
 function sneakyStop(){ if(sneaky){ clearInterval(sneaky); sneaky=null; } }
 
 /* ---------- the colourful neural brain ---------- */
