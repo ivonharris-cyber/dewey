@@ -273,6 +273,18 @@ _TEMPLATE = r"""<!DOCTYPE html>
   .moogle .kupo { color:#ff9ecf; animation:kupo 3.6s ease-in-out infinite; }
   @keyframes bob { 0%,100%{transform:translateY(0);} 50%{transform:translateY(-9px);} }
   @keyframes kupo { 0%,70%,100%{opacity:0;} 35%{opacity:1;} }
+  /* the cast — bear/Bonita/Chewy story pop-ups */
+  #cast { position:absolute; left:0; right:0; bottom:64px; display:flex; flex-direction:column;
+          align-items:center; gap:11px; z-index:24; pointer-events:none; }
+  .cast-line { display:flex; align-items:center; gap:13px; max-width:560px;
+               background:rgba(10,12,20,.9); border:1px solid var(--edge); border-radius:18px;
+               padding:11px 17px 11px 12px; opacity:0; transform:translateY(16px) scale(.96);
+               animation:castin .45s cubic-bezier(.2,.9,.3,1.3) forwards;
+               box-shadow:0 8px 30px rgba(0,0,0,.5); }
+  .cast-line svg { flex:0 0 auto; animation:bob 1.6s ease-in-out infinite; }
+  .cast-line .say { font-size:14.5px; color:#e8ebf4; line-height:1.4; }
+  .cast-line .say b { color:var(--gold); }
+  @keyframes castin { to { opacity:1; transform:translateY(0) scale(1); } }
   #brainlabel { position:absolute; left:18px; top:16px; font-size:11px; letter-spacing:.26em; color:var(--dim); }
   /* bottom charts */
   #charts { grid-row:2; grid-column:1 / -1; display:grid; grid-template-columns:1.6fr 1fr 1fr 1.5fr 1.4fr; gap:14px; padding:14px; }
@@ -301,6 +313,7 @@ _TEMPLATE = r"""<!DOCTYPE html>
     <div id="brainlabel">THE BRAIN · LEFT LOGIC · RIGHT CREATIVE · CORE LIMBIC</div>
     <div id="think">waking&hellip;</div>
     <div id="moogles"></div>
+    <div id="cast"></div>
   </div>
 
   <div id="reader" class="panel">
@@ -354,7 +367,7 @@ let thoughts=[];
 function renderThoughts(){
   tl.innerHTML='';
   const list = thoughts.length ? thoughts : [{live:false, g:'resting — waiting for you'}];
-  list.slice(0,6).forEach((th,i)=>{ const d=document.createElement('div');
+  list.slice(0,11).forEach((th,i)=>{ const d=document.createElement('div');
     d.className='task'+(th.live?'':' pending');
     d.innerHTML='<span class="wheel" style="--dur:'+(2.0+i*0.6).toFixed(1)+'s"></span>'+th.g;
     tl.appendChild(d); });
@@ -362,7 +375,7 @@ function renderThoughts(){
 function pushThought(a){
   const verb=TOOL_VERB[(a.tool||'').split('__')[0]] || (a.tool||'thinking');
   thoughts.unshift({live:true, g:(verb + (a.target ? ' · '+a.target : '')).slice(0,44)});
-  thoughts = thoughts.slice(0,6); renderThoughts();
+  thoughts = thoughts.slice(0,11); renderThoughts();
 }
 renderThoughts();
 
@@ -416,7 +429,7 @@ function renderOps(o){
   if(L.battery&&L.battery.pct!=null) h+=bar('Battery'+(L.battery.charging?' ⚡':''), L.battery.pct+'%', L.battery.pct, 0, 0);
   healthEl.innerHTML=h||'<div class="ok">n/a</div>';
   serversEl.innerHTML=(o.servers||[]).map(s=>'<div class="srv"><span class="dot '+(s.up?'up':'down')+'"></span>'+s.name+
-    '<span class="meta">'+(s.up?(s.days+'d · '+(s.ram&&s.ram.totalMB?Math.round(100*s.ram.usedMB/s.ram.totalMB)+'% ram':'')+' · load '+(s.load!=null?s.load:'?')):'down')+'</span></div>').join('')||'<div class="ok">n/a</div>';
+    '<span class="meta">'+(s.up?((s.days!=null?s.days:'?')+'d · '+(s.ram&&s.ram.totalMB&&s.ram.usedMB!=null?Math.round(100*s.ram.usedMB/s.ram.totalMB)+'% ram':'')+' · load '+(s.load!=null?s.load:'?')):'down')+'</span></div>').join('')||'<div class="ok">n/a</div>';
   sitesEl.innerHTML=(o.sites||[]).map(s=>'<div class="site"><span class="dot '+(s.up?'up':'down')+'"></span>'+s.name+
     '<span class="meta">'+(s.up?s.ms+'ms':'HTTP '+s.code)+'</span></div>').join('')||'<div class="ok">n/a</div>';
   const cur=o.curiosity||[];
@@ -436,8 +449,44 @@ function renderOps(o){
     else { cOps.data.labels=labels; cOps.data.datasets[0].data=g; cOps.data.datasets[1].data=c; cOps.data.datasets[2].data=r; cOps.update('none'); }
   }
 }
-async function pollOps(){ try{ const r=await fetch('bond-ops.json?t='+Date.now(),{cache:'no-store'}); if(r.ok) renderOps(await r.json()); }catch(e){} }
+async function pollOps(){ try{ const r=await fetch('bond-ops.json?t='+Date.now(),{cache:'no-store'}); if(r.ok){ const o=await r.json(); renderOps(o); checkOps(o); } }catch(e){} }
 setInterval(pollOps, 5000); pollOps();
+
+/* ===== THE CAST + AUDIBLES — 80s theatre ===== */
+const castEl=document.getElementById('cast');
+const SVG_BEAR=`<svg width="46" height="46" viewBox="0 0 46 46"><circle cx="12" cy="12" r="6" fill="#8a5a2b"/><circle cx="34" cy="12" r="6" fill="#8a5a2b"/><circle cx="12" cy="12" r="3" fill="#6b4423"/><circle cx="34" cy="12" r="3" fill="#6b4423"/><circle cx="23" cy="24" r="15" fill="#a06a34"/><ellipse cx="23" cy="30" rx="8" ry="6" fill="#c9a06a"/><ellipse cx="23" cy="28" rx="3.5" ry="2.6" fill="#3a2414"/><path d="M14 18 L20 21" stroke="#3a2414" stroke-width="2.4" stroke-linecap="round"/><path d="M32 18 L26 21" stroke="#3a2414" stroke-width="2.4" stroke-linecap="round"/><circle cx="17" cy="23" r="1.8" fill="#1a0f08"/><circle cx="29" cy="23" r="1.8" fill="#1a0f08"/><path d="M18 34 Q23 31 28 34" stroke="#1a0f08" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>`;
+const SVG_CHEWY=`<svg width="46" height="46" viewBox="0 0 46 46"><ellipse cx="23" cy="26" rx="13" ry="18" fill="#7a5230"/><ellipse cx="23" cy="24" rx="9" ry="11" fill="#9c6b3f"/><path d="M10 15 L37 35" stroke="#4a3320" stroke-width="4"/><circle cx="19" cy="20" r="1.8" fill="#1a0f08"/><circle cx="27" cy="20" r="1.8" fill="#1a0f08"/><ellipse cx="23" cy="27" rx="3" ry="4.5" fill="#2a1a0e"/><path d="M13 8 Q23 2 33 8" stroke="#7a5230" stroke-width="5" fill="none" stroke-linecap="round"/></svg>`;
+const SVG_BONITA=`<svg width="46" height="46" viewBox="0 0 46 46"><path d="M9 20 Q9 6 23 6 Q37 6 37 20 L37 30 Q37 40 23 40 Q9 40 9 30 Z" fill="#6b4a3a"/><circle cx="23" cy="24" r="12" fill="#f4d6c0"/><path d="M11 18 Q23 7 35 18 L35 11 Q23 3 11 11 Z" fill="#6b4a3a"/><circle cx="18" cy="24" r="2" fill="#3a2414"/><circle cx="28" cy="24" r="2" fill="#3a2414"/><circle cx="15" cy="28" r="2" fill="#f7a8b8" opacity=".7"/><circle cx="31" cy="28" r="2" fill="#f7a8b8" opacity=".7"/><path d="M20 31 Q23 33 26 31" stroke="#c0506a" stroke-width="1.4" fill="none" stroke-linecap="round"/></svg>`;
+function castSay(svg, html){ const d=document.createElement('div'); d.className='cast-line'; d.innerHTML=svg+'<span class="say">'+html+'</span>'; castEl.appendChild(d); return d; }
+function clearCast(){ castEl.innerHTML=''; }
+
+let sfxCtx=null;
+function sfxA(){ if(!sfxCtx) sfxCtx=new (window.AudioContext||window.webkitAudioContext)(); if(sfxCtx.state==='suspended') sfxCtx.resume(); return sfxCtx; }
+function tone(freq,dur,type,vol,slideTo){ const c=sfxA(); const o=c.createOscillator(),g=c.createGain(); o.type=type||'sine'; o.frequency.setValueAtTime(freq,c.currentTime); if(slideTo) o.frequency.exponentialRampToValueAtTime(slideTo,c.currentTime+dur); g.gain.setValueAtTime(vol||0.15,c.currentTime); g.gain.exponentialRampToValueAtTime(0.0005,c.currentTime+dur); o.connect(g); g.connect(c.destination); o.start(); o.stop(c.currentTime+dur); }
+function noise(dur,vol){ const c=sfxA(); const b=c.createBuffer(1,Math.floor(c.sampleRate*dur),c.sampleRate); const d=b.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*(1-i/d.length); const s=c.createBufferSource(); s.buffer=b; const f=c.createBiquadFilter(); f.type='lowpass'; f.frequency.value=520; const g=c.createGain(); g.gain.value=vol||0.3; s.connect(f); f.connect(g); g.connect(c.destination); s.start(); }
+const SFX={ roar(){ noise(0.55,0.35); tone(95,0.5,'sawtooth',0.14,55); },
+  chaching(){ tone(880,0.08,'square',0.18); setTimeout(()=>tone(1320,0.2,'square',0.18),90); },
+  alert(){ tone(660,0.12,'square',0.16); setTimeout(()=>tone(440,0.16,'square',0.16),150); },
+  pulse(){ tone(240,0.12,'sine',0.08,180); }, bill(){ tone(520,0.1,'triangle',0.14); setTimeout(()=>tone(390,0.15,'triangle',0.14),110); } };
+
+// the story: something DOWN -> bear GRR -> Bonita (Slack + Chewy) -> Chewy roars
+let storyDown=new Set(), storyBusy=false;
+function alertStory(name){ if(storyBusy) return; storyBusy=true; clearCast();
+  SFX.roar(); castSay(SVG_BEAR, '<b>GRRR!</b> '+name+' just went DOWN!');
+  setTimeout(()=>castSay(SVG_BONITA, "Thanks — I'll pop that on the Slack board and get Chewy on it."), 1700);
+  setTimeout(()=>{ SFX.roar(); castSay(SVG_CHEWY, "<b>RRRAGH!</b> Chewy's seen the task — on it, captain!"); }, 3600);
+  setTimeout(()=>{ clearCast(); storyBusy=false; }, 8800); }
+function checkOps(o){ const downs=new Set();
+  (o.sites||[]).forEach(s=>{ if(s&&!s.up) downs.add('site '+s.name); });
+  (o.servers||[]).forEach(s=>{ if(s&&!s.up) downs.add(s.name); });
+  downs.forEach(n=>{ if(!storyDown.has(n)){ storyDown.add(n); alertStory(n); } });   // rising edge: fire once
+  [...storyDown].forEach(n=>{ if(!downs.has(n)) storyDown.delete(n); });               // recovered -> can fire again
+}
+
+// Pink-Panther-ish sneak loop while agents (Explore) are working
+let sneaky=null;
+function sneakyStart(){ if(sneaky) return; const n=[311,0,349,311,0,392,0,466]; let i=0; sneaky=setInterval(()=>{ const f=n[i%n.length]; if(f) tone(f,0.16,'triangle',0.05); i++; }, 260); }
+function sneakyStop(){ if(sneaky){ clearInterval(sneaky); sneaky=null; } }
 
 /* ---------- the colourful neural brain ---------- */
 const host = document.getElementById('brain');
@@ -557,7 +606,7 @@ scene.add(new THREE.Points(pg, new THREE.PointsMaterial({ size:9, map:SPRITE, ve
 
 const thinkEl=document.getElementById('think'); thinkEl.innerHTML='resting &mdash; brain healthy';
 let mood=0; // 0 rest .. 1 firing
-let asleep=true, lastActive=0;   // Bond naps until a clap or real activity wakes him
+let asleep=true, lastActive=0, agentsActive=false;   // Bond naps only when idle AND no agents working
 
 // find memory nodes whose label matches what the tool touched, and light them
 function lightMatch(text){
@@ -585,12 +634,14 @@ async function pollActivity(){
       thinkEl.innerHTML=`<b>${ic} ${a.tool||'thinking'}</b>`+(a.target?`<br>${a.target}`:'');
       lightMatch(a.target||a.tool);
       avatarSpeak(a); wake(); pushThought(a);
+      try{ SFX.pulse(); }catch(e){}
       clearTimeout(restT);
       restT=setTimeout(()=>{ mood=0; thinkEl.innerHTML='resting &mdash; brain healthy'; }, 2600);
     } else if(a.state==='listening' && a.seq===lastSeq){
       thinkEl.innerHTML='<b>listening&hellip;</b>'; avatarListen();
     }
     renderMoogles(a.agents||[]);
+    try{ agentsActive=(a.agents||[]).length>0; if(agentsActive){ sneakyStart(); wake(); } else sneakyStop(); }catch(e){}
   }catch(e){}
 }
 const moogleHost=document.getElementById('moogles');
@@ -683,7 +734,7 @@ new ResizeObserver(aResize).observe(aHost); aResize();
 
 let vrm=null; const aClock=new THREE.Clock();
 let talk=0, gesture=null, gT=0, happy=0, blinkT=2+Math.random()*3;
-let sCtx=null, sAudio=null, sAnalyser=null, sData=null, lastSpeech=-1, speaking=false, mouthAmp=0;
+let sCtx=null, sAudio=null, sAnalyser=null, sData=null, lastSpeech=-1, speaking=false, mouthAmp=0, micTrack=null;
 const vLoader=new GLTFLoader(); vLoader.register(p=>new VRMLoaderPlugin(p));
 vLoader.load('vendor/avatar-alt.vrm', (gltf)=>{
   vrm=gltf.userData.vrm;
@@ -700,6 +751,7 @@ function avatarNo(){ gesture='shake'; gT=0.9; }   // reserved: "no"
 function avatarAnimate(){
   requestAnimationFrame(avatarAnimate);
   const dt=Math.min(aClock.getDelta(), 0.05);
+  if(micTrack) micTrack.enabled = !speaking;   // half-duplex: deafen the mic while Bond speaks (no feedback)
   if(vrm){
     const t=performance.now()/1000;
     const head=vrm.humanoid.getNormalizedBoneNode('head');
@@ -733,16 +785,23 @@ function avatarAnimate(){
 }
 
 /* Bond talks back — play the edge-tts reply + lipsync from real audio amplitude */
-function playSpeech(){ try{
+function ensureVoice(){   // build ONE audio element + ONE graph, once — so it can never double/echo
   if(!sCtx) sCtx=new (window.AudioContext||window.webkitAudioContext)();
-  if(sAudio){ try{ sAudio.pause(); sAudio.currentTime=0; }catch(e){} }   // stop any prior clip so it never doubles/echoes
-  sAudio=new Audio('bond-speech.mp3?t='+Date.now());
-  const src=sCtx.createMediaElementSource(sAudio);
-  sAnalyser=sCtx.createAnalyser(); sAnalyser.fftSize=256; sData=new Uint8Array(sAnalyser.fftSize);
-  src.connect(sAnalyser); sAnalyser.connect(sCtx.destination);
+  if(!sAudio){
+    sAudio=new Audio();
+    const src=sCtx.createMediaElementSource(sAudio);
+    sAnalyser=sCtx.createAnalyser(); sAnalyser.fftSize=256; sData=new Uint8Array(sAnalyser.fftSize);
+    src.connect(sAnalyser); sAnalyser.connect(sCtx.destination);
+    sAudio.onended=()=>{ speaking=false; if(aCap) aCap.textContent='BOND · online'; };
+  }
+}
+async function playSpeech(){ try{
+  ensureVoice();
+  sAudio.pause(); try{ sAudio.currentTime=0; }catch(e){}
+  sAudio.src='bond-speech.mp3?t='+Date.now();
   speaking=true; if(aCap) aCap.textContent='BOND · speaking';
-  sAudio.onended=()=>{ speaking=false; if(aCap) aCap.textContent='BOND · online'; };
-  sCtx.resume(); sAudio.play().catch(()=>{ speaking=false; console.log('autoplay blocked — clap to enable voice'); });
+  try{ await sCtx.resume(); }catch(e){}
+  sAudio.play().catch(()=>{ speaking=false; });
 }catch(e){ console.log('speech err', e); } }
 async function pollSpeech(){ try{
   const r=await fetch('bond-speech.json?t='+Date.now(),{cache:'no-store'}); if(!r.ok) return;
@@ -754,6 +813,7 @@ setInterval(pollSpeech, 900);
 let wakeArmed=true, lastClap=0;
 async function initWake(){ try{
   const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+  micTrack=stream.getAudioTracks()[0];   // so we can deafen it while Bond speaks
   const wctx=new (window.AudioContext||window.webkitAudioContext)();
   const src=wctx.createMediaStreamSource(stream); const an=wctx.createAnalyser(); an.fftSize=512;
   src.connect(an); const buf=new Uint8Array(an.fftSize);
@@ -769,7 +829,7 @@ function wake(){ lastActive=performance.now(); if(!asleep) return;
   try{ if(sCtx) sCtx.resume(); }catch(e){} }
 function nap(){ if(asleep) return; asleep=true; aHost.classList.add('asleep');
   if(aCap) aCap.textContent='BOND · asleep'; thinkEl.innerHTML='&#128564; asleep &mdash; double-clap to wake'; }
-setInterval(()=>{ if(!asleep && !speaking && performance.now()-lastActive>45000) nap(); }, 4000);
+setInterval(()=>{ if(!asleep && !speaking && !agentsActive && performance.now()-lastActive>45000) nap(); }, 4000);
 // start asleep — napping peacefully until a clap or activity
 aHost.classList.add('asleep'); if(aCap) aCap.textContent='BOND · asleep';
 thinkEl.innerHTML='&#128564; asleep &mdash; double-clap to wake';
