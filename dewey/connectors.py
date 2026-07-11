@@ -387,6 +387,31 @@ def fuel_panel(today: Optional[date] = None) -> dict:
     return {"burn": token_burn(today), "savings": dewey_savings()}
 
 
+def activity_feed(today: Optional[date] = None, days: int = 30) -> dict:
+    """A LIVE activity pulse the cockpit owns — memory entries touched per day, from real file
+    mtimes, up to today. Independent of Claude's (often stale) stats-cache, so the graph is current."""
+    today = today or date.today()
+    start = today - timedelta(days=days - 1)
+    counts: dict[str, int] = {}
+    try:
+        silos = core.discover_silos()
+    except Exception:  # noqa: BLE001
+        return {"available": False, "as_of": today.isoformat()}
+    for s in silos:
+        for f in s.files:
+            try:
+                d = date.fromtimestamp(f.stat().st_mtime).isoformat()
+            except OSError:
+                continue
+            if d >= start.isoformat():
+                counts[d] = counts.get(d, 0) + 1
+    series = [{"date": (start + timedelta(days=i)).isoformat(),
+               "entries": counts.get((start + timedelta(days=i)).isoformat(), 0)}
+              for i in range(days)]
+    return {"available": True, "as_of": today.isoformat(),
+            "series": series, "total": sum(counts.values())}
+
+
 # ── panel state (no values, ever) ───────────────────────────────────────────
 def state(manifest=None) -> dict:
     manifest = manifest or load_manifest()
@@ -405,4 +430,5 @@ def state(manifest=None) -> dict:
         "bcp": bcp_status(manifest),
         "vault": {"available": vault_available(), "exists": vault_exists()},
         "fuel": fuel_panel(),
+        "activity": activity_feed(),
     }

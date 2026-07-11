@@ -2,6 +2,14 @@
 
 All notable changes to Dewey are documented here. This project follows [Semantic Versioning](https://semver.org).
 
+## [0.9.2] — 2026-07-11
+
+### Added
+- **`activity_feed()`** — a live daily activity pulse: memory entries touched per day from real file
+  mtimes, up to **today**, independent of Claude's (often weeks-stale) `stats-cache.json`. Added to the
+  connectors `state()` as `activity`; the standalone `dewey dashboard`'s Activity chart prefers it over the
+  stale stats-cache trend and labels it `live · <date>`.
+
 ## [0.9.1] — 2026-07-11
 
 ### Changed

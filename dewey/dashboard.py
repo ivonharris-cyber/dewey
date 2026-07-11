@@ -397,7 +397,7 @@ _TEMPLATE = r"""<!DOCTYPE html>
   </div>
 
   <div id="charts" class="panel">
-    <div class="chartbox"><h4>Activity — active days <span id="actasof" style="text-transform:none;letter-spacing:0;color:var(--dim);font-size:11px;font-weight:400"></span></h4><canvas id="cTrend"></canvas></div>
+    <div class="chartbox"><h4>Activity — brain entries/day <span id="actasof" style="text-transform:none;letter-spacing:0;color:var(--dim);font-size:11px;font-weight:400"></span></h4><canvas id="cTrend"></canvas></div>
     <div class="chartbox"><h4>Output tokens by model</h4><canvas id="cModel"></canvas></div>
     <div class="chartbox hero"><h4>Memory by class · Dewey‑classified</h4><canvas id="cClass"></canvas></div>
     <div class="chartbox" id="fuelbox"><h4>⛽ Token Fuel &amp; Dewey Savings</h4><div id="fuel"><div style="color:#8b90a4;font-size:11px">warming up&hellip;</div></div></div>
@@ -471,18 +471,25 @@ renderThoughts();
 /* ---------- charts ---------- */
 Chart.defaults.color = '#c3c8d6'; Chart.defaults.font.family = "'Segoe UI',system-ui,sans-serif"; Chart.defaults.font.size = 15;
 const grid = { color:'rgba(140,150,190,.08)' };
+// LIVE activity feed (memory entries/day up to today, from connectors.activity) preferred over the
+// stale stats-cache trend; falls back to BOND.trend if the feed is unavailable.
+var _act=(BOND.connectors||{}).activity;
+var _trendData = (_act && _act.available && _act.series && _act.series.length)
+  ? { labels:_act.series.map(d=>d.date.slice(5)),
+      datasets:[{ label:'brain entries', data:_act.series.map(d=>d.entries), borderColor:'#3fb950',
+        backgroundColor:'rgba(63,185,80,.16)', fill:true, tension:.35, pointRadius:0, borderWidth:2 }] }
+  : { labels:BOND.trend.map(d=>d.date.slice(5)),
+      datasets:[
+        { label:'messages', data:BOND.trend.map(d=>d.messages), borderColor:'#7dd3fc',
+          backgroundColor:'rgba(125,211,252,.12)', fill:true, tension:.4, pointRadius:0, borderWidth:2 },
+        { label:'tool calls', data:BOND.trend.map(d=>d.tools), borderColor:'#fbbf24',
+          backgroundColor:'rgba(251,191,36,.08)', fill:true, tension:.4, pointRadius:0, borderWidth:2 }] };
 new Chart(document.getElementById('cTrend'), {
-  type:'line',
-  data:{ labels: BOND.trend.map(d=>d.date.slice(5)),
-    datasets:[
-      { label:'messages', data:BOND.trend.map(d=>d.messages), borderColor:'#7dd3fc',
-        backgroundColor:'rgba(125,211,252,.12)', fill:true, tension:.4, pointRadius:0, borderWidth:2 },
-      { label:'tool calls', data:BOND.trend.map(d=>d.tools), borderColor:'#fbbf24',
-        backgroundColor:'rgba(251,191,36,.08)', fill:true, tension:.4, pointRadius:0, borderWidth:2 },
-    ]},
+  type:'line', data:_trendData,
   options:{ responsive:false, maintainAspectRatio:false, plugins:{legend:{labels:{boxWidth:16,font:{size:14}}}},
     scales:{ x:{grid, ticks:{maxTicksLimit:7,font:{size:13}}}, y:{grid, ticks:{font:{size:13}}}}}
 });
+(function(){ var a=document.getElementById('actasof'); if(a && _act && _act.available) a.textContent='· live · '+_act.as_of; })();
 const doughnut = (id, labels, values, colors) => new Chart(document.getElementById(id), {
   type:'doughnut',
   data:{ labels, datasets:[{ data:values, backgroundColor:colors, borderColor:'#06070c', borderWidth:2 }]},

@@ -113,6 +113,18 @@ class Connectors(unittest.TestCase):
         self.assertEqual(start.isoformat(), "2026-06-15")     # most recent 15th on/before today
         self.assertEqual(nxt.isoformat(), "2026-07-15")
 
+    def test_activity_feed_is_live_and_current(self) -> None:
+        from datetime import date, timedelta
+        # a memory file touched "today" must land on today's bucket (independent of Claude's stats-cache)
+        today = date.today()
+        a = connectors.activity_feed(today=today, days=30)
+        self.assertTrue(a["available"])
+        self.assertEqual(a["as_of"], today.isoformat())            # as-of = today, not a stale cache date
+        self.assertEqual(len(a["series"]), 30)
+        self.assertEqual(a["series"][-1]["date"], today.isoformat())  # last bucket is today
+        # every bucket carries a real integer count
+        self.assertTrue(all(isinstance(d["entries"], int) for d in a["series"]))
+
     def test_budget_roundtrip(self) -> None:
         connectors.set_budget(limit=50, price=12.5, day=3)
         b = connectors.read_budget()
