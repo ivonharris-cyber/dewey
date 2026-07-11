@@ -196,6 +196,10 @@ _TEMPLATE = r"""<!DOCTYPE html>
   #reader-body h4 { color:#fff; font-size:13px; margin:13px 0 3px; }
   #reader-body code { background:rgba(255,255,255,.07); padding:1px 5px; border-radius:5px; color:var(--gold); font-size:11.5px; }
   #reader-body .wl { color:var(--accent); }
+  #reader-body .note.collapsed { max-height:190px; overflow:hidden;
+    -webkit-mask-image:linear-gradient(#000 62%, transparent); mask-image:linear-gradient(#000 62%, transparent); }
+  #reader-body .noteexp { margin-top:9px; background:rgba(255,255,255,.05); border:1px solid var(--edge);
+    border-radius:9px; color:var(--gold); font-size:11.5px; padding:5px 12px; cursor:pointer; }
   /* ops / cockpit right column */
   #ops { grid-row:1; grid-column:4; display:flex; flex-direction:column; padding:14px 15px; gap:11px; overflow:auto; }
   #clockbox { text-align:center; }
@@ -296,11 +300,22 @@ _TEMPLATE = r"""<!DOCTYPE html>
   .cast-line .say b { color:var(--gold); }
   @keyframes castin { to { opacity:1; transform:translateY(0) scale(1); } }
   #brainlabel { position:absolute; left:18px; top:16px; font-size:11px; letter-spacing:.26em; color:var(--dim); }
-  /* bottom charts — cols 2..4, leaving col 1 for the connectors hub */
-  #charts { grid-row:2; grid-column:2 / -1; display:grid; grid-template-columns:1.4fr 1fr 1fr 1.4fr 1.3fr; gap:14px; padding:14px; }
+  /* bottom charts — cols 2..4, a clean 4-across (Activity · Tokens · Memory[hero] · Fuel) */
+  #charts { grid-row:2; grid-column:2 / -1; display:grid; grid-template-columns:1.3fr 1fr 1.2fr 1.3fr; gap:14px; padding:14px; }
   .chartbox { position:relative; min-width:0; }
   .chartbox h4 { margin:0 0 9px; font-size:14px; letter-spacing:.1em; color:#c3c8d6; text-transform:uppercase; font-weight:600; }
   .chartbox canvas { width:100% !important; height:222px !important; }
+  .chartbox.hero { border-left:2px solid rgba(255,215,120,.5); padding-left:12px; } .chartbox.hero h4 { color:var(--gold); }
+  #fuel { display:flex; flex-direction:column; align-items:center; gap:8px; padding-top:4px; }
+  #fuel .ring { width:118px; height:118px; border-radius:50%; position:relative; display:grid; place-items:center;
+                background:conic-gradient(var(--fc,#34d399) calc(var(--p,0)*1%), rgba(255,255,255,.06) 0); box-shadow:0 0 22px var(--fg,rgba(52,211,153,.35)); }
+  #fuel .ring::after { content:''; position:absolute; inset:11px; border-radius:50%; background:#080a12; }
+  #fuel .ring .v { position:relative; z-index:2; text-align:center; } #fuel .ring .v b { font-size:22px; color:#fff; display:block; line-height:1; }
+  #fuel .ring .v small { font-size:9.5px; letter-spacing:.14em; color:var(--dim); text-transform:uppercase; }
+  #fuel .fline { font-size:12px; color:#c3c8d6; text-align:center; } #fuel .fline b { color:var(--gold); }
+  #fuel .mpg { font-size:11.5px; color:var(--accent); text-align:center; border-top:1px solid var(--edge); padding-top:7px; width:100%; } #fuel .mpg b { color:#fff; }
+  #fuel .asof { font-size:9.5px; color:var(--dim); } #fuel .asof.stale { color:#e0a23a; }
+  #fuel .spark { display:flex; align-items:flex-end; gap:2px; height:26px; } #fuel .spark i { width:4px; background:var(--accent); border-radius:1px; opacity:.75; }
   /* connectors hub — bottom-left tabbed tool (Subscriptions · BCP · MCP + honest key vault) */
   #connectors { grid-row:2; grid-column:1; display:flex; flex-direction:column; padding:12px 12px 8px; overflow:hidden; }
   #connectors .hub-h { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
@@ -383,9 +398,8 @@ _TEMPLATE = r"""<!DOCTYPE html>
   <div id="charts" class="panel">
     <div class="chartbox"><h4>Activity — last 30 active days</h4><canvas id="cTrend"></canvas></div>
     <div class="chartbox"><h4>Output tokens by model</h4><canvas id="cModel"></canvas></div>
-    <div class="chartbox"><h4>Memory by class</h4><canvas id="cClass"></canvas></div>
-    <div class="chartbox"><h4>GPU · CPU · RAM — live</h4><canvas id="cOps"></canvas></div>
-    <div class="chartbox"><h4>Crons &amp; backups</h4><div id="cronlist" style="height:214px;overflow:auto"></div></div>
+    <div class="chartbox hero"><h4>Memory by class · Dewey‑classified</h4><canvas id="cClass"></canvas></div>
+    <div class="chartbox" id="fuelbox"><h4>⛽ Fuel · Dewey MPG</h4><div id="fuel"><div style="color:#8b90a4;font-size:11px">warming up&hellip;</div></div></div>
   </div>
 </div>
 
@@ -471,13 +485,33 @@ new Chart(document.getElementById('cTrend'), {
 const doughnut = (id, labels, values, colors) => new Chart(document.getElementById(id), {
   type:'doughnut',
   data:{ labels, datasets:[{ data:values, backgroundColor:colors, borderColor:'#06070c', borderWidth:2 }]},
-  options:{ responsive:false, maintainAspectRatio:true, cutout:'60%',
-    plugins:{legend:{position:'right',labels:{boxWidth:15,padding:11,font:{size:14}}}}}
+  options:{ responsive:false, maintainAspectRatio:false, cutout:'62%',
+    plugins:{legend:{position:'bottom',labels:{boxWidth:12,padding:8,font:{size:12}}}}}
 });
 doughnut('cModel', BOND.modelTokens.map(m=>m.model), BOND.modelTokens.map(m=>m.out),
   ['#a78bfa','#7dd3fc','#f472b6','#fbbf24','#34d399','#60a5fa']);
 doughnut('cClass', BOND.classDist.map(c=>c.klass.replace(/^\d+-/,'')), BOND.classDist.map(c=>c.count),
   BOND.classDist.map(c=>c.color));
+
+/* ⛽ Fuel + Dewey MPG — from the connectors state (assemble_data → connectors.fuel) */
+(function(){
+  const el=document.getElementById('fuel'); const C=(BOND.connectors||{}).fuel;
+  const fmt=n=>n>=1e6?(n/1e6).toFixed(1)+'M':n>=1e3?(n/1e3).toFixed(1)+'k':(''+(n||0));
+  if(!el||!C){ if(el) el.innerHTML='<div style="color:#8b90a4;font-size:11px">no token stats</div>'; return; }
+  const b=C.burn||{}, sv=C.savings||{};
+  if(!b.available){ el.innerHTML='<div style="color:#8b90a4;font-size:11px">no token stats yet</div>'; return; }
+  let html=''; const g=b.gauge;
+  if(g){ const pct=Math.min(100,g.pct||0);
+    const col=pct>=90?'#f87171':pct>=70?'#fbbf24':'#34d399', glow=pct>=90?'rgba(248,113,113,.4)':pct>=70?'rgba(251,191,36,.4)':'rgba(52,211,153,.35)';
+    html+='<div class="ring" style="--p:'+pct+';--fc:'+col+';--fg:'+glow+'"><div class="v"><b>$'+g.usd_used+'</b><small>of $'+g.limit_usd+'</small></div></div>';
+    html+='<div class="fline"><b>'+pct.toFixed(0)+'%</b> · $'+g.usd_per_day+'/day · range '+(g.range_days!=null?g.range_days+'d':'—')+'</div>';
+  } else { const spk=(b.spark||[]).slice(-24), mx=Math.max(1,...spk);
+    html+='<div class="spark">'+spk.map(v=>'<i style="height:'+Math.max(2,Math.round(26*v/mx))+'px"></i>').join('')+'</div>';
+    html+='<div class="fline"><b>'+fmt(b.avg_day)+'</b>/day · '+fmt(b.cycle_tokens)+' this cycle</div>'; }
+  if(sv.available) html+='<div class="mpg">🧠 <b>'+sv.multiplier+'×</b> lighter · brain '+sv.brain_mb+'MB → recall ~'+fmt(sv.recall_tokens)+'</div>';
+  html+='<div class="asof'+(b.stale?' stale':'')+'">as of '+(b.as_of||'—')+(b.stale?' · stale':'')+'</div>';
+  el.innerHTML=html;
+})();
 
 /* ===== cockpit ops (bond-ops.json) + digital clock ===== */
 const clockTime=document.getElementById('clock-time'), clockDate=document.getElementById('clock-date');
@@ -488,11 +522,9 @@ setInterval(tickClock,1000); tickClock();
 
 const mechOs=document.getElementById('mech-os'), mechHw=document.getElementById('mech-hw');
 const healthEl=document.getElementById('health'), serversEl=document.getElementById('servers'),
-      sitesEl=document.getElementById('sites'), curiosityEl=document.getElementById('curiosity-list'),
-      cronEl=document.getElementById('cronlist');
+      sitesEl=document.getElementById('sites'), curiosityEl=document.getElementById('curiosity-list');
 function bar(label,val,pct,warn,crit){ let cls=''; if(crit&&pct>=crit)cls='crit'; else if(warn&&pct>=warn)cls='warn';
   return '<div class="metric"><div class="lab"><span>'+label+'</span><b>'+val+'</b></div><div class="bar '+cls+'"><span style="width:'+Math.max(2,Math.min(100,pct))+'%"></span></div></div>'; }
-let cOps=null;
 function renderOps(o){
   if(o.mech){ mechOs.textContent=o.mech.os||'?'; mechHw.textContent=((o.mech.gpu||'').replace('NVIDIA GeForce ','')||o.mech.cpu||''); }
   const L=o.laptop||{}; let h='';
@@ -508,20 +540,7 @@ function renderOps(o){
     '<span class="meta">'+(s.up?s.ms+'ms':'HTTP '+s.code)+'</span></div>').join('')||'<div class="ok">n/a</div>';
   const cur=o.curiosity||[];
   curiosityEl.innerHTML=cur.length?cur.map(c=>'<div class="c">⚠ '+c+'</div>').join(''):'<div class="ok">all quiet — nothing unusual</div>';
-  cronEl.innerHTML=(o.crons||[]).map(c=>'<div class="srv"><span class="dot '+(c.stale?'down':'up')+'"></span>'+String(c.name).slice(0,26)+
-    '<span class="meta">'+(c.last==='never'?'never':c.ageDays+'d')+'</span></div>').join('')||'<div class="ok">no tasks</div>';
-  if(o.history&&o.history.length){
-    const labels=o.history.map(p=>p.t), g=o.history.map(p=>p.gpu), c=o.history.map(p=>p.cpu), r=o.history.map(p=>p.ram);
-    if(!cOps){ cOps=new Chart(document.getElementById('cOps'),{ type:'line',
-      data:{labels, datasets:[
-        {label:'GPU%',data:g,borderColor:'#34d399',backgroundColor:'rgba(52,211,153,.12)',fill:true,tension:.35,pointRadius:0,borderWidth:2},
-        {label:'CPU%',data:c,borderColor:'#7dd3fc',fill:false,tension:.35,pointRadius:0,borderWidth:2},
-        {label:'RAM%',data:r,borderColor:'#fbbf24',fill:false,tension:.35,pointRadius:0,borderWidth:2}]},
-      options:{responsive:false,maintainAspectRatio:false,animation:false,
-        plugins:{legend:{labels:{boxWidth:16,font:{size:14}}}},
-        scales:{x:{grid,ticks:{maxTicksLimit:6,font:{size:13}}},y:{grid,min:0,max:100,ticks:{font:{size:13}}}}}}); }
-    else { cOps.data.labels=labels; cOps.data.datasets[0].data=g; cOps.data.datasets[1].data=c; cOps.data.datasets[2].data=r; cOps.update('none'); }
-  }
+  // GPU/CPU/RAM live now lives ONLY in Host Health above — the duplicate bottom chart was removed.
 }
 async function pollOps(){ try{ const r=await fetch('bond-ops.json?t='+Date.now(),{cache:'no-store'}); if(r.ok){ const o=await r.json(); renderOps(o); checkOps(o); } }catch(e){} }
 setInterval(pollOps, 5000); pollOps();
@@ -756,9 +775,15 @@ async function openNote(idx){ const n=nodes[idx]; if(!n) return;
   activeSet=[idx]; activeGlow=1; rebuildHighlight();
   rdT.textContent=n.label; rdS.innerHTML='<span class="chip" style="border-color:'+n.color+';color:'+n.color+'">'+n.klass+'</span>';
   rdB.innerHTML='loading&hellip;';
+  let html;
   try{ const r=await fetch('notes/'+n.slug+'.md?t='+Date.now(),{cache:'no-store'});
-    rdB.innerHTML = r.ok ? mdLite(await r.text()) : (n.summary||'(no note body)'); }
-  catch(e){ rdB.textContent = n.summary||'(unavailable)'; } }
+    html = r.ok ? mdLite(await r.text()) : (n.summary||'(no note body)'); }
+  catch(e){ html = n.summary||'(unavailable)'; }
+  rdB.innerHTML='<div class="note collapsed" id="notec">'+html+'</div><button class="noteexp" id="noteexp">▾ Read full note</button>';
+  const c=document.getElementById('notec'), btn=document.getElementById('noteexp');
+  requestAnimationFrame(()=>{ if(c.scrollHeight<=c.clientHeight+6){ btn.style.display='none'; c.classList.remove('collapsed'); } });
+  btn.addEventListener('click', ()=>{ const collapsed=c.classList.toggle('collapsed');
+    btn.textContent = collapsed ? '▾ Read full note' : '▴ Collapse'; }); }
 renderer.domElement.addEventListener('pointerdown', e=>{ downXY=[e.clientX,e.clientY]; downT=performance.now(); });
 renderer.domElement.addEventListener('pointerup', e=>{ if(!downXY) return;
   const moved=Math.hypot(e.clientX-downXY[0], e.clientY-downXY[1]), dt=performance.now()-downT; downXY=null;

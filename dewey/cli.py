@@ -362,6 +362,34 @@ def cmd_connectors(args: argparse.Namespace) -> None:
             else:
                 print(f"  '{args.arg2}' is user-defined — add its install command in connectors.json.")
         return
+    if op == "tokens":
+        st = connectors.fuel_panel()
+        if args.json:
+            print(json.dumps(st))
+            return
+        b, sv = st["burn"], st["savings"]
+        if not b.get("available"):
+            print("  no token stats yet (~/.claude/stats-cache.json)")
+            return
+        print(f"  as of {b['as_of']}" + ("  (STALE)" if b.get("stale") else ""))
+        print(f"  cumulative out {b['cumulative']:,}  ·  this cycle {b['cycle_tokens']:,}  ·  avg/day {b['avg_day']:,}")
+        g = b.get("gauge")
+        if g:
+            rng = f"{g['range_days']}d" if g["range_days"] is not None else "—"
+            print(f"  ⛽ FUEL  ${g['usd_used']} / ${g['limit_usd']}  ({g['pct']}%)  ·  ${g['usd_per_day']}/day  ·  range {rng}  ·  resets in {b['reset_in_days']}d")
+        else:
+            print("  (set a limit + price for the fuel gauge:  dewey connectors budget --limit 100 --price 15 --day 15)")
+        if sv.get("available"):
+            print(f"  🧠 DEWEY MPG  brain {sv['brain_mb']}MB → recall ~{sv['recall_tokens']:,} tok  =  {sv['multiplier']}× lighter ({sv['pct_lighter']}%)")
+        return
+    if op == "budget":
+        if args.limit is None and args.price is None and args.day is None:
+            b = connectors.read_budget()
+            print(f"  limit=${b.get('spend_limit_usd')}  price=${b.get('price_per_1m_usd')}/1M  day={b.get('billing_day')}")
+            return
+        b = connectors.set_budget(limit=args.limit, price=args.price, day=args.day)
+        print(f"  [ok] limit=${b.get('spend_limit_usd')}  price=${b.get('price_per_1m_usd')}/1M  billing day={b.get('billing_day')}")
+        return
     if op == "vault":
         import getpass
         which = args.arg or "status"
@@ -484,13 +512,16 @@ def main(argv: list[str] | None = None) -> None:
     ask.set_defaults(fn=cmd_ask)
 
     con = sub.add_parser("connectors", help="the cockpit connectors/keys hub: subscriptions, BCP, MCP, vault")
-    con.add_argument("op", choices=["state", "list", "keys", "spend", "setcost", "bcp", "mcp", "vault", "key"])
+    con.add_argument("op", choices=["state", "list", "keys", "spend", "setcost", "bcp", "mcp", "vault", "key", "tokens", "budget"])
     con.add_argument("arg", nargs="?", help="sub-verb (bcp/mcp/vault) or id (setcost/key)")
     con.add_argument("arg2", nargs="?", help="target id, e.g. 'mcp install <id>'")
     con.add_argument("--json", action="store_true", help="machine-readable output (for the cockpit)")
     con.add_argument("--for", dest="reason", help="reason a key is requested (the key broker)")
     con.add_argument("--library", default="", help="library dir for MCP install templating")
     con.add_argument("--cost", type=float, help="monthly cost, for setcost")
+    con.add_argument("--limit", type=float, help="fuel: spend limit in USD (the tank)")
+    con.add_argument("--price", type=float, help="fuel: price per 1M tokens in USD (price per litre)")
+    con.add_argument("--day", type=int, help="fuel: billing day of month the cycle resets on")
     con.add_argument("--apply", action="store_true", help="really run (bcp backup uploads for real)")
     con.set_defaults(fn=cmd_connectors)
 

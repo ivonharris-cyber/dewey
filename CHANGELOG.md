@@ -2,6 +2,22 @@
 
 All notable changes to Dewey are documented here. This project follows [Semantic Versioning](https://semver.org).
 
+## [0.9.0] — 2026-07-11
+
+### Added
+- **Fuel gauge + Dewey MPG** (`dewey connectors tokens`, `dewey connectors budget`). Real token usage from
+  `~/.claude/stats-cache.json` (never fabricated, always carries `as_of`/`stale`); set a spend limit + price
+  per 1M tokens + billing day (`budget --limit <$> --price <$/1M> --day <D>`) and it derives a fuel gauge
+  ($ used / limit, $/day, range to refuel). Fused with `dewey_savings()` — the measured **N× lighter to
+  recall** (brain vs. the session index). Folded into the connectors `state()` under a `fuel` key, so the
+  cockpit's bottom-right panel renders it. No budget set → an honest burn-rate readout, no guesses.
+
+### Changed
+- **Standalone `dewey dashboard` refresh** to match the C# cockpit: charts row is a clean **4-across**
+  (Activity · Output-tokens · **Memory-by-class [hero]** · **Fuel + Dewey MPG**) — the duplicate
+  GPU/CPU/RAM chart and the Crons box are gone; doughnut legends moved to the bottom; the reader shows a
+  partial summary with a **"Read full note"** expand.
+
 ## [0.8.1] — 2026-07-11
 
 ### Added

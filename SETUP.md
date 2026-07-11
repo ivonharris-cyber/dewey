@@ -124,3 +124,14 @@ dewey connectors key ANTHROPIC_API_KEY --for "Bonita chat"   # unlock + approve 
 ```
 
 `vault.enc` and `expenses.csv` live in `~/.dewey/` and are git‑ignored — no secret ever enters the repo.
+
+### Fuel gauge (token spend) + Dewey MPG
+
+Real token usage from Claude's `stats-cache.json` (never fabricated; labelled `as of <date>`). Set a spend
+limit + your price per 1M tokens to turn it into a fuel gauge:
+
+```bash
+dewey connectors tokens                       # burn rate + the measured "N× lighter" Dewey MPG
+dewey connectors budget --limit 100 --price 15 --day 15   # $100 tank · $15 per 1M tokens · resets on the 15th
+dewey connectors tokens                       # now: $ used / $100, $/day, range to refuel
+```

@@ -13,6 +13,7 @@ import csv
 import json
 import os
 import subprocess
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -23,6 +24,9 @@ DEWEY_HOME = Path.home() / ".dewey"
 EXPENSES = DEWEY_HOME / "expenses.csv"
 VAULT = DEWEY_HOME / "vault.enc"
 VAULT_MAGIC = b"DEWEYVAULT1\n"
+STATS = Path.home() / ".claude" / "stats-cache.json"
+BUDGET = DEWEY_HOME / "budget.json"
+BYTES_PER_TOKEN = 3.9   # the repo's own benchmark conversion (see docs/BENCHMARK.md)
 
 
 # ── manifest ────────────────────────────────────────────────────────────────
@@ -265,6 +269,124 @@ def unlock(passphrase: str) -> Vault:
     return Vault(json.loads(data.decode()))
 
 
+# ── Fuel gauge (token spend) + Dewey MPG (recall savings) ───────────────────
+def _load_stats() -> dict:
+    try:
+        return json.loads(STATS.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def _daily_tokens(stats: dict) -> list[tuple[str, int]]:
+    """[(date, total output tokens that day)] from stats-cache dailyModelTokens."""
+    out = []
+    for d in stats.get("dailyModelTokens", []):
+        out.append((d.get("date", ""), sum((d.get("tokensByModel") or {}).values())))
+    return out
+
+
+def read_budget() -> dict:
+    try:
+        return json.loads(BUDGET.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def set_budget(limit=None, price=None, day=None) -> dict:
+    """Persist the fuel config (spend limit $, price per 1M tokens, billing day)."""
+    b = read_budget()
+    if limit is not None:
+        b["spend_limit_usd"] = limit
+    if price is not None:
+        b["price_per_1m_usd"] = price
+    if day is not None:
+        b["billing_day"] = int(day)
+    DEWEY_HOME.mkdir(parents=True, exist_ok=True)
+    core._atomic_write(BUDGET, json.dumps(b, indent=2))
+    return b
+
+
+def _cycle_bounds(day: int, today: date) -> tuple[date, date]:
+    """(cycle_start, next_reset) for a billing day, clamped to 28 to dodge short months."""
+    day = max(1, min(int(day or 1), 28))
+    if today.day >= day:
+        start = today.replace(day=day)
+    else:
+        y, m = (today.year, today.month - 1) if today.month > 1 else (today.year - 1, 12)
+        start = date(y, m, day)
+    nxt = date(start.year + 1, 1, day) if start.month == 12 else date(start.year, start.month + 1, day)
+    return start, nxt
+
+
+def token_burn(today: Optional[date] = None) -> dict:
+    """Real token usage from stats-cache (never fabricated). Adds a fuel `gauge`
+    ONLY when the user has set a spend limit + price. Always carries `as_of`/`stale`."""
+    stats = _load_stats()
+    as_of = stats.get("lastComputedDate", "")
+    daily = _daily_tokens(stats)
+    if not daily:
+        return {"available": False, "as_of": as_of}
+    today = today or date.today()
+    totals = [t for _, t in daily]
+    recent = totals[-30:]
+    avg_day = sum(recent) / len(recent) if recent else 0
+    cumulative = sum(m.get("outputTokens", 0) for m in (stats.get("modelUsage") or {}).values())
+    budget = read_budget()
+    start, nxt = _cycle_bounds(budget.get("billing_day"), today)
+    cycle = sum(t for d, t in daily if d and d >= start.isoformat())
+    out = {
+        "available": True, "as_of": as_of,
+        "stale": bool(as_of and as_of < (today - timedelta(days=3)).isoformat()),
+        "cumulative": cumulative, "cycle_tokens": cycle,
+        "avg_day": int(avg_day), "peak": max(totals) if totals else 0, "spark": recent,
+        "cycle_start": start.isoformat(), "next_reset": nxt.isoformat(),
+        "reset_in_days": (nxt - today).days,
+    }
+    limit, price = budget.get("spend_limit_usd"), budget.get("price_per_1m_usd")
+    if limit and price:
+        usd_used = cycle / 1e6 * price
+        usd_day = avg_day / 1e6 * price
+        out["gauge"] = {
+            "limit_usd": limit, "price_per_1m": price, "usd_used": round(usd_used, 2),
+            "pct": round(min(1.0, usd_used / limit) * 100, 1),
+            "usd_per_day": round(usd_day, 2),
+            "range_days": int((limit - usd_used) / usd_day) if usd_day > 0 else None,
+        }
+    return out
+
+
+def dewey_savings() -> dict:
+    """The MPG: total brain (all silo bytes) vs. the index you actually load each session
+    (MEMORY.md) → the N× the library is lighter to recall than to re-read. Measured, live."""
+    try:
+        silos = core.discover_silos()
+    except Exception:  # noqa: BLE001
+        return {"available": False}
+    brain = index = 0
+    for s in silos:
+        for f in s.files:
+            try:
+                sz = f.stat().st_size
+            except OSError:
+                continue
+            brain += sz
+            if f.name.lower() == "memory.md":
+                index += sz
+    if not brain or not index:
+        return {"available": False}
+    bt, rt = brain / BYTES_PER_TOKEN, index / BYTES_PER_TOKEN
+    return {
+        "available": True, "brain_tokens": int(bt), "recall_tokens": int(rt),
+        "brain_mb": round(brain / 1e6, 2), "multiplier": round(bt / rt, 1),
+        "pct_lighter": round((1 - rt / bt) * 100, 2),
+    }
+
+
+def fuel_panel(today: Optional[date] = None) -> dict:
+    """The Fuel + Dewey MPG panel block: real burn + measured savings."""
+    return {"burn": token_burn(today), "savings": dewey_savings()}
+
+
 # ── panel state (no values, ever) ───────────────────────────────────────────
 def state(manifest=None) -> dict:
     manifest = manifest or load_manifest()
@@ -282,4 +404,5 @@ def state(manifest=None) -> dict:
         "mcps": mcp_list(manifest),
         "bcp": bcp_status(manifest),
         "vault": {"available": vault_available(), "exists": vault_exists()},
+        "fuel": fuel_panel(),
     }
