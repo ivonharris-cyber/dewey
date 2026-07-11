@@ -2,6 +2,14 @@
 
 All notable changes to Dewey are documented here. This project follows [Semantic Versioning](https://semver.org).
 
+## [0.9.1] — 2026-07-11
+
+### Changed
+- **Standalone dashboard UX pass** (mirrors the cockpit): circular doughnuts with readable legends (no
+  stretch), a bigger fuel panel renamed **"Token Fuel & Dewey Savings"** (dropped "MPG") with plain-English
+  savings, and honest **"as of &lt;date&gt; (stale)"** labels on the Activity chart + fuel panel — because
+  `stats-cache.json` can be weeks stale.
+
 ## [0.9.0] — 2026-07-11
 
 ### Added

@@ -306,16 +306,17 @@ _TEMPLATE = r"""<!DOCTYPE html>
   .chartbox h4 { margin:0 0 9px; font-size:14px; letter-spacing:.1em; color:#c3c8d6; text-transform:uppercase; font-weight:600; }
   .chartbox canvas { width:100% !important; height:222px !important; }
   .chartbox.hero { border-left:2px solid rgba(255,215,120,.5); padding-left:12px; } .chartbox.hero h4 { color:var(--gold); }
-  #fuel { display:flex; flex-direction:column; align-items:center; gap:8px; padding-top:4px; }
-  #fuel .ring { width:118px; height:118px; border-radius:50%; position:relative; display:grid; place-items:center;
-                background:conic-gradient(var(--fc,#34d399) calc(var(--p,0)*1%), rgba(255,255,255,.06) 0); box-shadow:0 0 22px var(--fg,rgba(52,211,153,.35)); }
-  #fuel .ring::after { content:''; position:absolute; inset:11px; border-radius:50%; background:#080a12; }
-  #fuel .ring .v { position:relative; z-index:2; text-align:center; } #fuel .ring .v b { font-size:22px; color:#fff; display:block; line-height:1; }
-  #fuel .ring .v small { font-size:9.5px; letter-spacing:.14em; color:var(--dim); text-transform:uppercase; }
-  #fuel .fline { font-size:12px; color:#c3c8d6; text-align:center; } #fuel .fline b { color:var(--gold); }
-  #fuel .mpg { font-size:11.5px; color:var(--accent); text-align:center; border-top:1px solid var(--edge); padding-top:7px; width:100%; } #fuel .mpg b { color:#fff; }
-  #fuel .asof { font-size:9.5px; color:var(--dim); } #fuel .asof.stale { color:#e0a23a; }
-  #fuel .spark { display:flex; align-items:flex-end; gap:2px; height:26px; } #fuel .spark i { width:4px; background:var(--accent); border-radius:1px; opacity:.75; }
+  #fuel { display:flex; flex-direction:column; align-items:center; gap:10px; padding-top:4px; }
+  #fuel .ring { width:150px; height:150px; border-radius:50%; position:relative; display:grid; place-items:center;
+                background:conic-gradient(var(--fc,#34d399) calc(var(--p,0)*1%), rgba(255,255,255,.06) 0); box-shadow:0 0 26px var(--fg,rgba(52,211,153,.35)); }
+  #fuel .ring::after { content:''; position:absolute; inset:13px; border-radius:50%; background:#080a12; }
+  #fuel .ring .v { position:relative; z-index:2; text-align:center; } #fuel .ring .v b { font-size:28px; color:#fff; display:block; line-height:1; }
+  #fuel .ring .v small { font-size:11px; letter-spacing:.12em; color:var(--dim); text-transform:uppercase; }
+  #fuel .fline { font-size:14px; color:#d8dce8; text-align:center; } #fuel .fline b { color:var(--gold); }
+  #fuel .big { font-size:34px; font-weight:600; color:#fff; line-height:1; } #fuel .big small { font-size:13px; color:var(--dim); font-weight:400; }
+  #fuel .mpg { font-size:14px; color:var(--accent); text-align:center; border-top:1px solid var(--edge); padding-top:9px; width:100%; } #fuel .mpg b { color:#fff; font-size:18px; }
+  #fuel .asof { font-size:11px; color:var(--dim); } #fuel .asof.stale { color:#e0a23a; }
+  #fuel .spark { display:flex; align-items:flex-end; gap:3px; height:40px; } #fuel .spark i { width:6px; background:var(--accent); border-radius:2px; opacity:.8; }
   /* connectors hub — bottom-left tabbed tool (Subscriptions · BCP · MCP + honest key vault) */
   #connectors { grid-row:2; grid-column:1; display:flex; flex-direction:column; padding:12px 12px 8px; overflow:hidden; }
   #connectors .hub-h { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
@@ -396,10 +397,10 @@ _TEMPLATE = r"""<!DOCTYPE html>
   </div>
 
   <div id="charts" class="panel">
-    <div class="chartbox"><h4>Activity — last 30 active days</h4><canvas id="cTrend"></canvas></div>
+    <div class="chartbox"><h4>Activity — active days <span id="actasof" style="text-transform:none;letter-spacing:0;color:var(--dim);font-size:11px;font-weight:400"></span></h4><canvas id="cTrend"></canvas></div>
     <div class="chartbox"><h4>Output tokens by model</h4><canvas id="cModel"></canvas></div>
     <div class="chartbox hero"><h4>Memory by class · Dewey‑classified</h4><canvas id="cClass"></canvas></div>
-    <div class="chartbox" id="fuelbox"><h4>⛽ Fuel · Dewey MPG</h4><div id="fuel"><div style="color:#8b90a4;font-size:11px">warming up&hellip;</div></div></div>
+    <div class="chartbox" id="fuelbox"><h4>⛽ Token Fuel &amp; Dewey Savings</h4><div id="fuel"><div style="color:#8b90a4;font-size:11px">warming up&hellip;</div></div></div>
   </div>
 </div>
 
@@ -485,8 +486,8 @@ new Chart(document.getElementById('cTrend'), {
 const doughnut = (id, labels, values, colors) => new Chart(document.getElementById(id), {
   type:'doughnut',
   data:{ labels, datasets:[{ data:values, backgroundColor:colors, borderColor:'#06070c', borderWidth:2 }]},
-  options:{ responsive:false, maintainAspectRatio:false, cutout:'62%',
-    plugins:{legend:{position:'bottom',labels:{boxWidth:12,padding:8,font:{size:12}}}}}
+  options:{ responsive:false, maintainAspectRatio:true, cutout:'60%',
+    plugins:{legend:{position:'right',labels:{boxWidth:16,padding:10,font:{size:15}}}}}
 });
 doughnut('cModel', BOND.modelTokens.map(m=>m.model), BOND.modelTokens.map(m=>m.out),
   ['#a78bfa','#7dd3fc','#f472b6','#fbbf24','#34d399','#60a5fa']);
@@ -506,11 +507,14 @@ doughnut('cClass', BOND.classDist.map(c=>c.klass.replace(/^\d+-/,'')), BOND.clas
     html+='<div class="ring" style="--p:'+pct+';--fc:'+col+';--fg:'+glow+'"><div class="v"><b>$'+g.usd_used+'</b><small>of $'+g.limit_usd+'</small></div></div>';
     html+='<div class="fline"><b>'+pct.toFixed(0)+'%</b> · $'+g.usd_per_day+'/day · range '+(g.range_days!=null?g.range_days+'d':'—')+'</div>';
   } else { const spk=(b.spark||[]).slice(-24), mx=Math.max(1,...spk);
-    html+='<div class="spark">'+spk.map(v=>'<i style="height:'+Math.max(2,Math.round(26*v/mx))+'px"></i>').join('')+'</div>';
-    html+='<div class="fline"><b>'+fmt(b.avg_day)+'</b>/day · '+fmt(b.cycle_tokens)+' this cycle</div>'; }
-  if(sv.available) html+='<div class="mpg">🧠 <b>'+sv.multiplier+'×</b> lighter · brain '+sv.brain_mb+'MB → recall ~'+fmt(sv.recall_tokens)+'</div>';
-  html+='<div class="asof'+(b.stale?' stale':'')+'">as of '+(b.as_of||'—')+(b.stale?' · stale':'')+'</div>';
+    html+='<div class="big">'+fmt(b.avg_day)+'<small> tokens/day</small></div>';
+    html+='<div class="spark">'+spk.map(v=>'<i style="height:'+Math.max(3,Math.round(40*v/mx))+'px"></i>').join('')+'</div>';
+    html+='<div class="fline" style="color:var(--dim);font-size:12px">set a spend limit to see $ &amp; refuel range</div>'; }
+  if(sv.available) html+='<div class="mpg">🧠 Dewey recall is <b>'+sv.multiplier+'×</b> lighter'+
+    '<div style="color:var(--dim);font-size:11.5px;margin-top:2px">whole brain '+sv.brain_mb+'MB · you load ~'+fmt(sv.recall_tokens)+' tokens</div></div>';
+  html+='<div class="asof'+(b.stale?' stale':'')+'">stats as of '+(b.as_of||'—')+(b.stale?' · stale':'')+'</div>';
   el.innerHTML=html;
+  const a=document.getElementById('actasof'); if(a) a.textContent='· as of '+(b.as_of||'—')+(b.stale?' (stale)':'');
 })();
 
 /* ===== cockpit ops (bond-ops.json) + digital clock ===== */
