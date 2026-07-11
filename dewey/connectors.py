@@ -387,12 +387,25 @@ def fuel_panel(today: Optional[date] = None) -> dict:
     return {"burn": token_burn(today), "savings": dewey_savings()}
 
 
+# Fact vs. thought is DETERMINISTIC — from each entry's declared type (its filename prefix, via
+# core.categorize), never an AI guess. Established/verifiable types are facts; in-flight/creative
+# types are thoughts (ideas & proposals — promoted to facts when a project ships).
+_FACT_CATEGORIES = {"reference", "user", "decision", "feedback"}
+
+
+def classify_fact(category: str) -> str:
+    """'fact' for established/verifiable types, else 'thought' (idea/proposal/creative)."""
+    return "fact" if category in _FACT_CATEGORIES else "thought"
+
+
 def activity_feed(today: Optional[date] = None, days: int = 30) -> dict:
-    """A LIVE activity pulse the cockpit owns — memory entries touched per day, from real file
-    mtimes, up to today. Independent of Claude's (often stale) stats-cache, so the graph is current."""
+    """A LIVE activity pulse the cockpit owns — memory entries touched per day, split into FACTS vs
+    THOUGHTS by Dewey's deterministic type classification, from real file mtimes up to today.
+    Independent of Claude's (often stale) stats-cache, so the graph is current and auditable."""
     today = today or date.today()
     start = today - timedelta(days=days - 1)
-    counts: dict[str, int] = {}
+    fact: dict[str, int] = {}
+    thought: dict[str, int] = {}
     try:
         silos = core.discover_silos()
     except Exception:  # noqa: BLE001
@@ -403,13 +416,18 @@ def activity_feed(today: Optional[date] = None, days: int = 30) -> dict:
                 d = date.fromtimestamp(f.stat().st_mtime).isoformat()
             except OSError:
                 continue
-            if d >= start.isoformat():
-                counts[d] = counts.get(d, 0) + 1
-    series = [{"date": (start + timedelta(days=i)).isoformat(),
-               "entries": counts.get((start + timedelta(days=i)).isoformat(), 0)}
-              for i in range(days)]
-    return {"available": True, "as_of": today.isoformat(),
-            "series": series, "total": sum(counts.values())}
+            if d < start.isoformat():
+                continue
+            bucket = fact if classify_fact(core.categorize(f.stem)[0]) == "fact" else thought
+            bucket[d] = bucket.get(d, 0) + 1
+    series = []
+    for i in range(days):
+        dd = (start + timedelta(days=i)).isoformat()
+        fc, tc = fact.get(dd, 0), thought.get(dd, 0)
+        series.append({"date": dd, "fact": fc, "thought": tc, "entries": fc + tc})
+    return {"available": True, "as_of": today.isoformat(), "series": series,
+            "total": sum(fact.values()) + sum(thought.values()),
+            "fact_total": sum(fact.values()), "thought_total": sum(thought.values())}
 
 
 # ── panel state (no values, ever) ───────────────────────────────────────────

@@ -122,8 +122,19 @@ class Connectors(unittest.TestCase):
         self.assertEqual(a["as_of"], today.isoformat())            # as-of = today, not a stale cache date
         self.assertEqual(len(a["series"]), 30)
         self.assertEqual(a["series"][-1]["date"], today.isoformat())  # last bucket is today
-        # every bucket carries a real integer count
-        self.assertTrue(all(isinstance(d["entries"], int) for d in a["series"]))
+        # every bucket carries real integer fact/thought/total counts that add up
+        for d in a["series"]:
+            self.assertEqual(d["fact"] + d["thought"], d["entries"])
+        self.assertEqual(a["fact_total"] + a["thought_total"], a["total"])
+
+    def test_fact_fiction_is_deterministic_by_type(self) -> None:
+        # deterministic classification, no AI guess: reference/decision = fact; project/note = thought
+        self.assertEqual(connectors.classify_fact("reference"), "fact")
+        self.assertEqual(connectors.classify_fact("decision"), "fact")
+        self.assertEqual(connectors.classify_fact("user"), "fact")
+        self.assertEqual(connectors.classify_fact("project"), "thought")
+        self.assertEqual(connectors.classify_fact("session"), "thought")
+        self.assertEqual(connectors.classify_fact("note"), "thought")
 
     def test_budget_roundtrip(self) -> None:
         connectors.set_budget(limit=50, price=12.5, day=3)

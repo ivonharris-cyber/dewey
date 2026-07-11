@@ -2,6 +2,14 @@
 
 All notable changes to Dewey are documented here. This project follows [Semantic Versioning](https://semver.org).
 
+## [0.9.3] — 2026-07-11
+
+### Added
+- **Fact vs. thought split** in `activity_feed` — deterministic from each entry's declared type
+  (`classify_fact`), never an AI guess: facts = reference/user/decision/feedback; thoughts =
+  project/session/note/soul (ideas & proposals, promoted to facts when a project ships). Exposed as
+  `fact`/`thought` per day plus `fact_total`/`thought_total`; the Activity chart stacks them.
+
 ## [0.9.2] — 2026-07-11
 
 ### Added
