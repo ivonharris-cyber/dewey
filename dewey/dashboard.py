@@ -493,7 +493,9 @@ new Chart(document.getElementById('cTrend'), {
   options:{ responsive:false, maintainAspectRatio:false, plugins:{legend:{labels:{boxWidth:16,font:{size:14}}}},
     scales:{ x:{grid, stacked:_live, ticks:{maxTicksLimit:7,font:{size:13}}}, y:{grid, stacked:_live, ticks:{font:{size:13}}}}}
 });
-(function(){ var a=document.getElementById('actasof'); if(a && _act && _act.available) a.textContent='· live · '+_act.as_of; })();
+(function(){ var a=document.getElementById('actasof'); if(a && _act && _act.available)
+  a.innerHTML='· live · '+_act.as_of+' · <b style="color:#3fb950">'+(_act.fact_total||0)+
+    ' facts</b> : <b style="color:#ffd778">'+(_act.thought_total||0)+' thoughts</b>'; })();
 const doughnut = (id, labels, values, colors) => new Chart(document.getElementById(id), {
   type:'doughnut',
   data:{ labels, datasets:[{ data:values, backgroundColor:colors, borderColor:'#06070c', borderWidth:2 }]},

@@ -2,6 +2,13 @@
 
 All notable changes to Dewey are documented here. This project follows [Semantic Versioning](https://semver.org).
 
+## [0.9.4] — 2026-07-11
+
+### Changed
+- Activity caption shows the **facts : thoughts** ratio (mirrors the cockpit).
+- README cockpit section updated for the live Facts‑vs‑Thoughts graph, the Fuel & Savings gauge, and
+  Dewey's *why* — stop drift, lies, and open keys in plain sight.
+
 ## [0.9.3] — 2026-07-11
 
 ### Added

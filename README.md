@@ -42,12 +42,23 @@ A completely customisable command surface (a WebGL cockpit you can embed or run 
 
 - **The living 3D brain** — your memory rendered as a colour‑classed neural graph; nodes light as the
   agent thinks, and click any node to read that (secret‑scrubbed) note.
-- **Fable‑ready split mind** — a left panel that separates **Facts** from **Fiction / Thoughts**, so the
-  reflective (dream‑state) mind and the waking (intellect) mind stay legibly apart.
+- **Facts vs Thoughts — live** — the Activity graph splits each day into **Facts** (green) and
+  **Thoughts** (gold), stacked and current *to today*, with a running **facts : thoughts** ratio. The split
+  is **deterministic**, from each entry's declared type — not an AI guess, so it's auditable: references,
+  decisions, your profile and settled rules are *facts*; projects, sessions and ideas are *thoughts*
+  (promoted to facts when they ship). You watch ideas become knowledge.
+- **⛽ Token Fuel & Dewey Savings** — set a spend limit + price per 1M tokens and the reactor gauge shows
+  fuel burned vs. your tank with a refuel range; alongside the measured **"N× lighter to recall"** savings.
+  Real token counts (labelled *as of* their date, never faked).
 - **The avatar** — VRM slot, **STT + TTS** two‑way voice, lip‑sync, and a bottom command bar to talk to
   your agent by keyboard or voice.
 - **Live ops** — Tailscale network health, GPU/CPU/RAM, crons & backups, and an alert theatre that only
   cries wolf for the things that matter.
+
+> **Why Dewey exists:** to stop the three failures of long‑lived agent memory — **drift** (bloat and
+> contradiction), **lies** (stale notes presented as current), and **open keys in plain sight** (secrets
+> committed where anyone can read them). The library, the honest *as‑of* dates, and `dewey doctor` (leak
+> detection that never prints a secret) are the answers — see the commands below and [Security](#security).
 
 ## Out of the box — the arsenal
 
