@@ -7,6 +7,10 @@
 .dewey-cache/
 vault-export/
 /promo/
+# connectors hub: the encrypted key vault + local expense ledger live in ~/.dewey/,
+# never in the repo — but guard against a stray copy landing here.
+vault.enc
+expenses.csv
 
 # --- python ---
 __pycache__/

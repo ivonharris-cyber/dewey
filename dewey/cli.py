@@ -2,10 +2,11 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
-from . import __version__, core, graph, brain3d, dashboard
+from . import __version__, core, graph, brain3d, dashboard, connectors
 
 def _selected(silos, name, want_all):
     """Yield (silo, file) pairs matching a filename, or every file with --all."""
@@ -289,6 +290,117 @@ def cmd_ask(args: argparse.Namespace) -> None:
           f"Load with:  dewey checkout <name>")
 
 
+def cmd_connectors(args: argparse.Namespace) -> None:
+    op = args.op
+    if op == "state":
+        st = connectors.state()
+        if args.json:
+            print(json.dumps(st))
+            return
+        s = st["spend"]
+        print("Subscriptions")
+        for sub in st["subscriptions"]:
+            pill = "✓" if sub["ready"] else "✗"
+            print(f"  {pill} {sub['name']:26} ${sub['cost_month']:>6}/mo   {sub['powers']}")
+        print(f"  ── TOTAL  ${s['total_month']}/mo\n")
+        b = st["bcp"]
+        print(f"BCP → {b['remote']}{b['target']}   rclone={'ok' if b['rclone'] else 'MISSING'}")
+        print(f"Vault: available={st['vault']['available']} exists={st['vault']['exists']}")
+        print(f"MCP: {len(st['mcps'])} in catalogue")
+        return
+    if op == "list":
+        for c in connectors.load_manifest():
+            print(f"  [{c.get('kind','?'):12}] {c['id']:18} {c.get('name','')}")
+        return
+    if op == "keys":
+        for cid, keys in connectors.key_status().items():
+            for k, present in keys.items():
+                print(f"  {'✓' if present else '✗'} {k:26} ({cid})")
+        return
+    if op == "spend":
+        s = connectors.spend_summary()
+        for it in s["items"]:
+            print(f"  {it['name']:28} {it['currency']} {it['cost_month']:>7.2f} /mo")
+        print(f"\n  TOTAL  {s['currency']} {s['total_month']:.2f} /mo   → {s['ledger']}")
+        return
+    if op == "setcost":
+        if not args.arg or args.cost is None:
+            print("usage: dewey connectors setcost <id> --cost <amount>")
+            raise SystemExit(2)
+        connectors.set_cost(args.arg, args.cost)
+        print(f"[ok] {args.arg} = {args.cost}/mo")
+        return
+    if op == "bcp":
+        which = args.arg or "status"
+        if which == "status":
+            b = connectors.bcp_status()
+            print(f"  remote:  {b['remote']}{b['target']}")
+            print(f"  rclone:  {'found' if b['rclone'] else 'NOT FOUND'}  {b['rclone_path']}")
+            print(f"  task:    {b['task']}")
+            print(f"  last:    {b['last_log'] or '(no log yet)'}")
+        elif which == "backup":
+            r = connectors.bcp_backup(dry_run=not args.apply)
+            print(f"  $ {r['cmd']}\n  {'ok' if r['ok'] else 'FAILED'}")
+            if r["out"]:
+                print(r["out"])
+            if not args.apply:
+                print("\n  (dry-run) add --apply to really upload.")
+        return
+    if op == "mcp":
+        which = args.arg or "list"
+        if which == "list":
+            for c in connectors.mcp_list():
+                print(f"  {c.get('popularity',0):>4}k★  {c['id']:16} {c.get('name','')}")
+                print(f"           {c.get('powers','')}")
+        elif which == "install":
+            if not args.arg2:
+                print("usage: dewey connectors mcp install <id> [--library DIR]")
+                raise SystemExit(2)
+            cmd = connectors.mcp_install_cmd(args.arg2, library=args.library)
+            if cmd:
+                print(f"  run this to install (human-in-the-loop):\n\n    {cmd}\n")
+            else:
+                print(f"  '{args.arg2}' is user-defined — add its install command in connectors.json.")
+        return
+    if op == "vault":
+        import getpass
+        which = args.arg or "status"
+        if which == "status":
+            print(f"  available: {connectors.vault_available()}   exists: {connectors.vault_exists()}")
+        elif which == "import":
+            if not connectors.vault_available():
+                print('  vault needs the [vault] extra:  pip install "dewey[vault]"')
+                raise SystemExit(2)
+            p1 = getpass.getpass("  set vault passphrase: ")
+            if not p1 or p1 != getpass.getpass("  confirm passphrase: "):
+                print("  passphrases empty or don't match.")
+                raise SystemExit(2)
+            n = connectors.vault_import(p1)
+            print(f"  [ok] encrypted {n} keys into {connectors.VAULT}")
+        elif which == "unlock":
+            v = connectors.unlock(getpass.getpass("  vault passphrase: "))
+            print(f"  [ok] unlocked — {len(v.names())} keys this session: {', '.join(v.names())}")
+        return
+    if op == "key":
+        # The gated broker: unlock -> HITL approval -> release the value to stdout ONCE.
+        # This is the ONLY path that emits a secret value, and only to the caller's stdout.
+        import getpass
+        if not args.arg:
+            print('usage: dewey connectors key <ENV_NAME> --for "reason"')
+            raise SystemExit(2)
+        v = connectors.unlock(getpass.getpass("  vault passphrase: "))
+        reason = args.reason or "(unspecified)"
+        if input(f"  release {args.arg} for: {reason}?  [y/N] ").strip().lower() != "y":
+            print("  denied.", file=sys.stderr)
+            raise SystemExit(1)
+        val = v.get(args.arg)
+        if val is None:
+            print(f"  {args.arg} not in vault", file=sys.stderr)
+            raise SystemExit(1)
+        print(val)  # only place a value is emitted — to the caller, never a log
+        return
+
+
 def main(argv: list[str] | None = None) -> None:
     for _stream in (sys.stdout, sys.stderr):  # print unicode paths on any console
         try:
@@ -370,6 +482,17 @@ def main(argv: list[str] | None = None) -> None:
     ask.add_argument("--to", required=True, help="the library directory created by sync")
     ask.add_argument("--limit", type=int, default=8, help="max entries to show (default 8)")
     ask.set_defaults(fn=cmd_ask)
+
+    con = sub.add_parser("connectors", help="the cockpit connectors/keys hub: subscriptions, BCP, MCP, vault")
+    con.add_argument("op", choices=["state", "list", "keys", "spend", "setcost", "bcp", "mcp", "vault", "key"])
+    con.add_argument("arg", nargs="?", help="sub-verb (bcp/mcp/vault) or id (setcost/key)")
+    con.add_argument("arg2", nargs="?", help="target id, e.g. 'mcp install <id>'")
+    con.add_argument("--json", action="store_true", help="machine-readable output (for the cockpit)")
+    con.add_argument("--for", dest="reason", help="reason a key is requested (the key broker)")
+    con.add_argument("--library", default="", help="library dir for MCP install templating")
+    con.add_argument("--cost", type=float, help="monthly cost, for setcost")
+    con.add_argument("--apply", action="store_true", help="really run (bcp backup uploads for real)")
+    con.set_defaults(fn=cmd_connectors)
 
     args = parser.parse_args(argv)
     args.fn(args)

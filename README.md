@@ -66,23 +66,35 @@ starts in its own environment already holding:
 > Some surfaces ship as live connectors and some as staged panels you arm with your own keys — the
 > cockpit is honest about which is which, and never fires anything outward without your say‑so.
 
-## Subscriptions & keys — one honest vault (exploring)
+## Connectors & Keys — the bottom‑left hub
 
-> **Status: currently exploring the use case — not shipped yet.** Listed here so the intent is on the
-> record; the sections below are honest about what already works vs. what's still in design.
+A tabbed tool docked at the **bottom‑left of the 007 Dash** that makes onboarding self‑serve — monitor and
+manage everything in one place. The design principle is Dewey's own: **stay honest, leak nothing.** Backed
+by the `dewey connectors` engine (a `connectors.json` catalogue + a local ledger + a fernet key vault).
 
-A tool docked at the **bottom‑left of the 007 Dash** to monitor and manage every **subscription and API
-key in one place** — what you pay for, what's active, and what each key unlocks. The design principle is
-Dewey's own: **stay honest, leak nothing.**
+- **Subscriptions** — every service as a card: what it *powers*, an **Open** deep‑link to the provider's
+  API‑key page (grab your key), a `✓ set / ✗ missing` pill (**never the value**), and a **$/mo billable
+  wired to a local `expenses.csv`** with a running total.
+- **BCP** — one‑click **Back up now** that triggers your proven `BCP‑to‑GoogleDrive` rclone task, with
+  live rclone/last‑backup status.
+- **MCP** — a **load‑and‑choice catalogue with popularity** (Obsidian, Notion, Full‑Note pages, Additional
+  AI, Dewey, Graphify, …), each with an Install button that opens a human‑in‑the‑loop console.
 
-- **`.env` is git‑ignored automatically** and never enters a commit — *this floor is already enforced*
-  (see [Security](#security): `.gitignore` rules + `dewey doctor` leak detection + credential‑skipping `sync`).
-- **Keys encrypted at rest**, with a **two‑factor / human‑in‑the‑loop gate** before any AI command that
-  needs a key can release it. *(In design.)*
-- **Heavy guardrails** — no key is ever echoed, pooled, or written into a note. **No leaked keys, anywhere.**
+**The hard rule — the honest key vault:**
+- **`.env` is git‑ignored automatically** and never enters a commit (`dewey doctor` proves it — see [Security](#security)).
+- **Keys are encrypted at rest** (fernet); the vault **unlocks once per session with a passphrase**, and
+  **every AI command that needs a key passes a human‑in‑the‑loop approval** before release.
+- **No key is ever echoed, pooled, or written into a note** — the cockpit panel and the `state` payload
+  carry only names + booleans, never a value. **No leaked keys, anywhere.**
 
-What's live today is the honesty floor; the unified subscription/key panel and the encrypted two‑factor
-vault are the part being explored.
+```bash
+dewey connectors state --json     # what the cockpit panel reads (booleans only)
+dewey connectors keys             # ✓/✗ per service
+dewey connectors spend            # the $/mo total from your local ledger
+dewey connectors mcp list         # the catalogue, by popularity
+dewey connectors bcp status       # your Google‑Drive backup connector
+pip install "dewey[vault]"        # add the encrypted key vault
+```
 
 ## The engine: Dewey, a living brain
 

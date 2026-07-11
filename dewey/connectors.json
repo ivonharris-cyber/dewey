@@ -1,0 +1,122 @@
+{
+  "_note": "Connector catalogue for the 007-Bond cockpit bottom-left hub. Popularity is a curated snapshot (approx GitHub stars, thousands), not a live scrape. No secret VALUES ever live here — only which env key a connector needs.",
+  "connectors": [
+    {
+      "id": "anthropic", "kind": "subscription", "name": "Anthropic — Claude",
+      "powers": "Bonita chat, code review, the main agent brain",
+      "env": ["ANTHROPIC_API_KEY"],
+      "keys_url": "https://console.anthropic.com/settings/keys",
+      "cost_month": 20, "currency": "USD"
+    },
+    {
+      "id": "openai", "kind": "subscription", "name": "OpenAI",
+      "powers": "GPT models, Whisper STT, image tools",
+      "env": ["OPENAI_API_KEY"],
+      "keys_url": "https://platform.openai.com/api-keys",
+      "cost_month": 0, "currency": "USD"
+    },
+    {
+      "id": "nvidia", "kind": "subscription", "name": "NVIDIA NIM",
+      "powers": "Nemotron (Bonita primary brain) — free tier",
+      "env": ["NVIDIA_API_KEY"],
+      "keys_url": "https://build.nvidia.com/",
+      "cost_month": 0, "currency": "USD"
+    },
+    {
+      "id": "zai", "kind": "subscription", "name": "z.ai GLM (PaaS)",
+      "powers": "GLM fallback brain — glm-4.5-flash free; flagship pay-as-you-go",
+      "env": ["GLM_API_KEY"],
+      "keys_url": "https://z.ai/manage-apikey/apikey-list",
+      "cost_month": 0, "currency": "USD"
+    },
+    {
+      "id": "elevenlabs", "kind": "subscription", "name": "ElevenLabs",
+      "powers": "High-quality avatar TTS voice",
+      "env": ["ELEVENLABS_API_KEY"],
+      "keys_url": "https://elevenlabs.io/app/settings/api-keys",
+      "cost_month": 5, "currency": "USD"
+    },
+    {
+      "id": "stripe", "kind": "subscription", "name": "Stripe",
+      "powers": "Payments for the storefronts (Onda, shop)",
+      "env": ["STRIPE_API_KEY"],
+      "keys_url": "https://dashboard.stripe.com/apikeys",
+      "cost_month": 0, "currency": "USD"
+    },
+    {
+      "id": "runpod", "kind": "subscription", "name": "RunPod",
+      "powers": "Cloud GPU — precision coder + Wan2.2 reels",
+      "env": ["RUNPOD_API_KEY"],
+      "keys_url": "https://www.runpod.io/console/user/settings",
+      "cost_month": 0, "currency": "USD"
+    },
+    {
+      "id": "notion-sub", "kind": "subscription", "name": "Notion",
+      "powers": "Canonical docs, roadmaps, the live-truth pages",
+      "env": ["NOTION_API_KEY"],
+      "keys_url": "https://www.notion.so/my-integrations",
+      "cost_month": 0, "currency": "USD"
+    },
+
+    {
+      "id": "mcp-dewey", "kind": "mcp", "name": "Dewey — your library",
+      "powers": "The living brain: search / read_entry / catalogue / checkout / checkin",
+      "popularity": 1,
+      "repo": "https://github.com/ivonharris-cyber/dewey",
+      "install": "claude mcp add -s user dewey --env DEWEY_LIBRARY=\"{library}\" -- dewey-mcp",
+      "env": ["DEWEY_LIBRARY"]
+    },
+    {
+      "id": "mcp-graphify", "kind": "mcp", "name": "Graphify — brain graph",
+      "powers": "Visual knowledge graph of the brain as it grows",
+      "popularity": 81,
+      "repo": "https://github.com/graphify/graphify",
+      "install": "claude mcp add -s user graphify -- graphify-mcp",
+      "env": []
+    },
+    {
+      "id": "mcp-obsidian", "kind": "mcp", "name": "Obsidian Vault",
+      "powers": "Read/write your Obsidian vault markups",
+      "popularity": 3,
+      "repo": "https://github.com/MarkusPfundstein/mcp-obsidian",
+      "install": "claude mcp add -s user obsidian --env OBSIDIAN_API_KEY=\"{key}\" -- uvx mcp-obsidian",
+      "env": ["OBSIDIAN_API_KEY"]
+    },
+    {
+      "id": "mcp-notion", "kind": "mcp", "name": "Notion",
+      "powers": "Full Notion workspace — pages, databases, search",
+      "popularity": 3,
+      "repo": "https://github.com/makenotion/notion-mcp-server",
+      "install": "claude mcp add -s user --transport http notion https://mcp.notion.com/mcp",
+      "env": []
+    },
+    {
+      "id": "mcp-fullnote", "kind": "mcp", "name": "Full-Note Pages",
+      "powers": "Full-page note capture (user-defined provider)",
+      "popularity": 0,
+      "repo": "",
+      "install": "",
+      "env": [],
+      "user_defined": true
+    },
+    {
+      "id": "mcp-additional-ai", "kind": "mcp", "name": "Additional AI",
+      "powers": "Add another model provider (e.g. OpenRouter) to the agent",
+      "popularity": 0,
+      "repo": "https://github.com/heurist-network/heurist-mesh-mcp-server",
+      "install": "",
+      "env": ["OPENROUTER_API_KEY"],
+      "user_defined": true
+    },
+
+    {
+      "id": "bcp-gdrive", "kind": "bcp", "name": "Brain Backup → Google Drive",
+      "powers": "3-tier BCP: D: → F: → your ivonharris Google Drive (rclone)",
+      "remote": "ivonharris-gdrive:",
+      "target": "Backups/Bond-Brain",
+      "script": "D:\\sync-sata-to-cloud.ps1",
+      "log": "D:\\cloud-sync-log.txt",
+      "task": "BCP-to-GoogleDrive"
+    }
+  ]
+}

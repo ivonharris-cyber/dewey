@@ -99,3 +99,28 @@ claude mcp add -s user dewey --env DEWEY_LIBRARY="<your library dir>" -- dewey-m
 ```
 
 Then reload Claude. Tools: `search`, `read_entry`, `catalogue`, `checkout`, `checkin`.
+
+## Connectors & Keys hub (optional, v0.8)
+
+The engine behind the 007 Dash bottom‑left tool — subscriptions, the Google‑Drive BCP backup, the MCP
+catalogue, and the honest key vault. It reads your `.env` files only to report **set/missing** (never a
+value).
+
+```bash
+dewey connectors state --json      # the panel's data (booleans only, no secret values)
+dewey connectors keys              # ✓/✗ per service
+dewey connectors spend             # $/mo total from ~/.dewey/expenses.csv
+dewey connectors setcost anthropic --cost 20
+dewey connectors mcp list          # catalogue, sorted by popularity
+dewey connectors bcp status        # your rclone Google‑Drive backup connector
+```
+
+The optional **encrypted key vault** (fernet) adds a passphrase‑unlocked store with per‑use approval:
+
+```bash
+pip install "dewey[vault]"
+dewey connectors vault import       # encrypt your env keys into ~/.dewey/vault.enc (0600)
+dewey connectors key ANTHROPIC_API_KEY --for "Bonita chat"   # unlock + approve → releases once
+```
+
+`vault.enc` and `expenses.csv` live in `~/.dewey/` and are git‑ignored — no secret ever enters the repo.

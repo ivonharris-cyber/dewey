@@ -2,6 +2,24 @@
 
 All notable changes to Dewey are documented here. This project follows [Semantic Versioning](https://semver.org).
 
+## [0.8.0] — 2026-07-11
+
+### Added
+- **`dewey connectors` — the cockpit's Connectors & Keys hub engine.** Powers the 007 Dash bottom‑left
+  tabbed tool (Subscriptions · BCP · MCP) plus the honest key vault. New files: `dewey/connectors.json`
+  (the catalogue) and `dewey/connectors.py` (the engine). Subcommands:
+  `state [--json]`, `list`, `keys`, `spend`, `setcost`, `bcp status|backup`, `mcp list|install`,
+  `vault import|unlock|status`, and the gated `key` broker.
+- **Honest key vault** — an optional fernet‑encrypted store (`pip install "dewey[vault]"`), unlocked once
+  per session with a passphrase; the `key` broker releases a value only after a human‑in‑the‑loop
+  approval, and only to the caller's stdout — never to a log. `key_status`/`state` return **booleans
+  only, never a value** (enforced by a test).
+- **Local expense ledger** (`~/.dewey/expenses.csv`) wired to the Subscriptions tab for a $/mo total, and a
+  **BCP** wrapper over your existing rclone Google‑Drive backup.
+
+### Changed
+- Version aligned to **0.8.0** across `__init__` and `pyproject` (they had drifted).
+
 ## [0.7.1] — 2026-07-10
 
 ### Fixed
