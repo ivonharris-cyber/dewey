@@ -66,6 +66,24 @@ starts in its own environment already holding:
 > Some surfaces ship as live connectors and some as staged panels you arm with your own keys — the
 > cockpit is honest about which is which, and never fires anything outward without your say‑so.
 
+## Subscriptions & keys — one honest vault (exploring)
+
+> **Status: currently exploring the use case — not shipped yet.** Listed here so the intent is on the
+> record; the sections below are honest about what already works vs. what's still in design.
+
+A tool docked at the **bottom‑left of the 007 Dash** to monitor and manage every **subscription and API
+key in one place** — what you pay for, what's active, and what each key unlocks. The design principle is
+Dewey's own: **stay honest, leak nothing.**
+
+- **`.env` is git‑ignored automatically** and never enters a commit — *this floor is already enforced*
+  (see [Security](#security): `.gitignore` rules + `dewey doctor` leak detection + credential‑skipping `sync`).
+- **Keys encrypted at rest**, with a **two‑factor / human‑in‑the‑loop gate** before any AI command that
+  needs a key can release it. *(In design.)*
+- **Heavy guardrails** — no key is ever echoed, pooled, or written into a note. **No leaked keys, anywhere.**
+
+What's live today is the honesty floor; the unified subscription/key panel and the encrypted two‑factor
+vault are the part being explored.
+
 ## The engine: Dewey, a living brain
 
 Under the cockpit is the original Dewey — **under 1,000 lines of dependency‑free Python** — that keeps the
