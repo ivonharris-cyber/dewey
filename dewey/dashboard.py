@@ -20,7 +20,7 @@ import re
 from collections import Counter
 from pathlib import Path
 
-from . import brain3d, core
+from . import brain3d, core, connectors
 
 NOTES_DIR = "notes"
 _NOTE_MAX = 6000
@@ -141,7 +141,17 @@ def assemble_data(library: Path, claude_dir: Path, out_dir: Path) -> dict:
         "modelTokens": model_tokens,
         "classDist": class_top,
         "tasks": _load_tasks(out_dir),
+        "connectors": _connectors_state(),
     }
+
+
+def _connectors_state() -> dict:
+    """The Connectors & Keys hub state (booleans only, no secret values). Defensive:
+    a missing rclone / env file must never break the dashboard build."""
+    try:
+        return connectors.state()
+    except Exception:  # noqa: BLE001 — the dashboard must still build
+        return {"subscriptions": [], "spend": {"total_month": 0}, "mcps": [], "bcp": {}, "vault": {}}
 
 
 def write_dashboard(library: Path, out_dir: Path, claude_dir: Path) -> tuple[Path, dict]:
@@ -286,11 +296,37 @@ _TEMPLATE = r"""<!DOCTYPE html>
   .cast-line .say b { color:var(--gold); }
   @keyframes castin { to { opacity:1; transform:translateY(0) scale(1); } }
   #brainlabel { position:absolute; left:18px; top:16px; font-size:11px; letter-spacing:.26em; color:var(--dim); }
-  /* bottom charts */
-  #charts { grid-row:2; grid-column:1 / -1; display:grid; grid-template-columns:1.6fr 1fr 1fr 1.5fr 1.4fr; gap:14px; padding:14px; }
+  /* bottom charts — cols 2..4, leaving col 1 for the connectors hub */
+  #charts { grid-row:2; grid-column:2 / -1; display:grid; grid-template-columns:1.4fr 1fr 1fr 1.4fr 1.3fr; gap:14px; padding:14px; }
   .chartbox { position:relative; min-width:0; }
   .chartbox h4 { margin:0 0 9px; font-size:14px; letter-spacing:.1em; color:#c3c8d6; text-transform:uppercase; font-weight:600; }
   .chartbox canvas { width:100% !important; height:222px !important; }
+  /* connectors hub — bottom-left tabbed tool (Subscriptions · BCP · MCP + honest key vault) */
+  #connectors { grid-row:2; grid-column:1; display:flex; flex-direction:column; padding:12px 12px 8px; overflow:hidden; }
+  #connectors .hub-h { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+  #connectors .hub-h .t { font-size:12px; letter-spacing:.22em; color:var(--dim); text-transform:uppercase; }
+  #connectors .lock { font-size:10px; color:var(--dim); border:1px solid var(--edge); border-radius:8px; padding:2px 7px; }
+  #connectors .lock.open { color:#3fb950; border-color:rgba(63,185,80,.4); }
+  #contabs { display:flex; gap:4px; margin-bottom:8px; }
+  .contab { flex:1; text-align:center; font-size:11px; letter-spacing:.08em; padding:6px 4px; border:1px solid var(--edge);
+            border-radius:9px; color:var(--dim); cursor:pointer; text-transform:uppercase; }
+  .contab.on { color:var(--gold); border-color:rgba(255,215,120,.4); background:rgba(255,215,120,.07); }
+  #conbody { flex:1; overflow:auto; padding-right:2px; }
+  .con-card { display:flex; flex-direction:column; gap:2px; padding:8px 10px; margin-bottom:7px;
+              background:rgba(10,12,20,.5); border:1px solid var(--edge); border-radius:11px; }
+  .con-card .r1 { display:flex; align-items:center; justify-content:space-between; gap:6px; }
+  .con-card .nm { font-size:12.5px; color:var(--ink); font-weight:600; }
+  .con-card .pw { font-size:10.5px; color:var(--dim); line-height:1.35; }
+  .con-card .meta { display:flex; align-items:center; gap:7px; }
+  .pill { font-size:10px; padding:1px 7px; border-radius:7px; border:1px solid var(--edge); color:var(--dim); }
+  .pill.ok { color:#3fb950; border-color:rgba(63,185,80,.4); }
+  .pill.no { color:#e5534b; border-color:rgba(229,83,75,.4); }
+  .pill.star { color:var(--gold); border-color:rgba(255,215,120,.35); }
+  .con-btn { font-size:10.5px; padding:3px 9px; border-radius:8px; border:1px solid var(--edge); color:#cfd3dc;
+             background:rgba(255,255,255,.05); cursor:pointer; white-space:nowrap; text-decoration:none; }
+  .con-btn:hover { background:rgba(255,255,255,.12); color:#fff; }
+  #conspend { font-size:12px; color:var(--ink); padding:7px 2px 2px; border-top:1px solid var(--edge); margin-top:2px; }
+  #conspend b { color:var(--gold); }
 </style></head>
 <body>
 <div id="app">
@@ -331,6 +367,17 @@ _TEMPLATE = r"""<!DOCTYPE html>
     <div><div class="ops-h">Servers</div><div id="servers"></div></div>
     <div><div class="ops-h">Sites</div><div id="sites"></div></div>
     <div id="curiosity"><div class="ops-h">Curiosity</div><div id="curiosity-list"><div class="ok">warming up&hellip;</div></div></div>
+  </div>
+
+  <div id="connectors" class="panel">
+    <div class="hub-h"><span class="t">Connectors &amp; Keys</span><span id="conlock" class="lock">🔒 vault</span></div>
+    <div id="contabs">
+      <div class="contab on" data-tab="subs">Subs</div>
+      <div class="contab" data-tab="bcp">BCP</div>
+      <div class="contab" data-tab="mcp">MCP</div>
+    </div>
+    <div id="conbody"></div>
+    <div id="conspend"></div>
   </div>
 
   <div id="charts" class="panel">
@@ -378,6 +425,33 @@ function pushThought(a){
   thoughts = thoughts.slice(0,11); renderThoughts();
 }
 renderThoughts();
+
+/* ---------- Connectors & Keys hub (standalone: from embedded BOND.connectors) ---------- */
+(function(){
+  const C=BOND.connectors||{};
+  const body=document.getElementById('conbody'), spend=document.getElementById('conspend'), lock=document.getElementById('conlock');
+  const tabs=[...document.querySelectorAll('.contab')]; let tab='subs';
+  const esc=s=>String(s==null?'':s).replace(/[<&>"]/g,c=>({'<':'&lt;','&':'&amp;','>':'&gt;','"':'&quot;'}[c]));
+  const kp=s=>(s.env||[]).map(k=>{const ok=s.keys&&s.keys[k];return '<span class="pill '+(ok?'ok':'no')+'">'+(ok?'✓':'✗')+' '+esc(k)+'</span>';}).join(' ');
+  function subs(){ return (C.subscriptions||[]).map(s=>'<div class="con-card"><div class="r1"><span class="nm">'+esc(s.name)+'</span><div class="meta">'+
+    (s.cost_month?'<span class="pill">$'+esc(s.cost_month)+'/mo</span>':'')+
+    (s.keys_url?'<a class="con-btn" href="'+esc(s.keys_url)+'" target="_blank" rel="noopener">Open ↗</a>':'')+
+    '</div></div><div class="pw">'+esc(s.powers)+'</div><div class="meta">'+kp(s)+'</div></div>').join(''); }
+  function bcp(){ const b=C.bcp||{}; return '<div class="con-card"><div class="r1"><span class="nm">Brain Backup → Google Drive</span>'+
+    '<span class="pill '+(b.rclone?'ok':'no')+'">'+(b.rclone?'rclone ✓':'rclone ✗')+'</span></div>'+
+    '<div class="pw">Target: '+esc(b.remote)+esc(b.target)+'<br>Task: '+(esc(b.task)||'—')+'</div>'+
+    '<div class="pw">Last: '+(esc(b.last_log)||'(no log yet)')+'</div>'+
+    '<div class="pw"><code>dewey connectors bcp backup --apply</code></div></div>'; }
+  function mcp(){ return (C.mcps||[]).map(m=>'<div class="con-card"><div class="r1"><span class="nm">'+esc(m.name)+'</span>'+
+    '<span class="pill star">'+esc(m.popularity||0)+'k★</span></div><div class="pw">'+esc(m.powers)+'</div>'+
+    '<div class="pw"><code>dewey connectors mcp install '+esc(m.id)+'</code></div></div>').join(''); }
+  function draw(){ body.innerHTML= tab==='subs'?subs() : tab==='bcp'?bcp() : mcp();
+    spend.style.display= tab==='subs'?'block':'none';
+    if(tab==='subs'&&C.spend) spend.innerHTML='Spend: <b>$'+esc(C.spend.total_month)+'/mo</b>';
+    const v=C.vault||{}; lock.textContent=v.exists?'🔓 vault':'🔒 vault'; lock.classList.toggle('open',!!v.exists); }
+  tabs.forEach(t=>t.addEventListener('click',()=>{ tab=t.dataset.tab; tabs.forEach(x=>x.classList.toggle('on',x===t)); draw(); }));
+  draw();
+})();
 
 /* ---------- charts ---------- */
 Chart.defaults.color = '#c3c8d6'; Chart.defaults.font.family = "'Segoe UI',system-ui,sans-serif"; Chart.defaults.font.size = 15;

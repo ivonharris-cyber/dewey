@@ -2,6 +2,18 @@
 
 All notable changes to Dewey are documented here. This project follows [Semantic Versioning](https://semver.org).
 
+## [0.8.1] — 2026-07-11
+
+### Added
+- **Standalone cockpit mirror** — `dashboard.py` now renders the same bottom-left Connectors & Keys panel
+  (Subscriptions · BCP · MCP) from embedded `connectors.state()`, so the standalone `dewey dashboard`
+  cockpit matches the C# one. Open links are real anchors; install/backup show the exact CLI command.
+
+### Fixed
+- **BCP honesty** — the manifest labelled the backup remote `ivonharris-gdrive:`, but no such rclone
+  remote exists yet; the real backup runs to `kikeru-gdrive:SATA-Backup`. Corrected the manifest to the
+  real remote with a `migrate_to` note (the ivonharris migration needs an interactive `rclone config` OAuth).
+
 ## [0.8.0] — 2026-07-11
 
 ### Added

@@ -62,10 +62,9 @@ class Connectors(unittest.TestCase):
 
     def test_bcp_backup_cmd_is_rclone_copy_dryrun(self) -> None:
         cmd = connectors.bcp_backup_cmd(source="X")
-        self.assertIn("copy", cmd)
-        self.assertTrue(any("ivonharris-gdrive:" in a for a in cmd))
-        # the wrapper appends --dry-run when not applying (we assert the builder + flag, no upload)
         self.assertEqual(cmd[1], "copy")
+        # targets a Google-Drive rclone remote (account-agnostic; the real one is set in the manifest)
+        self.assertTrue(any("gdrive:" in a for a in cmd))
 
     def test_mcp_install_templating(self) -> None:
         cmd = connectors.mcp_install_cmd("mcp-dewey", library="/lib/here")

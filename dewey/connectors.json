@@ -111,9 +111,10 @@
 
     {
       "id": "bcp-gdrive", "kind": "bcp", "name": "Brain Backup → Google Drive",
-      "powers": "3-tier BCP: D: → F: → your ivonharris Google Drive (rclone)",
-      "remote": "ivonharris-gdrive:",
-      "target": "Backups/Bond-Brain",
+      "powers": "3-tier BCP: D: → F: → Google Drive (rclone). Migration to the ivonharris account pending OAuth.",
+      "remote": "kikeru-gdrive:",
+      "target": "SATA-Backup",
+      "migrate_to": "ivonharris-gdrive:",
       "script": "D:\\sync-sata-to-cloud.ps1",
       "log": "D:\\cloud-sync-log.txt",
       "task": "BCP-to-GoogleDrive"
