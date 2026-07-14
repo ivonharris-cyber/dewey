@@ -320,19 +320,22 @@ def cmd_tag(args: argparse.Namespace) -> None:
     if not library.is_dir():
         print(f"error: {library} is not a library directory (run sync first)")
         raise SystemExit(2)
-    plan = core.plan_tag(library)
-    print(f"{len(plan.targets)} entr{'y' if len(plan.targets) == 1 else 'ies'} to tag "
-          f"({plan.unchanged} already current).")
+    plan, register = core.plan_tag(library)
+    print(f"{len(plan.targets)} entr{'y' if len(plan.targets) == 1 else 'ies'} to catalogue "
+          f"({plan.unchanged} already carry their call number).")
     for path, _ in plan.targets[:20]:
-        print(f"  tag  {core.portable(path)}")
+        print(f"  catalogue  {core.portable(path)}")
     if len(plan.targets) > 20:
         print(f"  ... and {len(plan.targets) - 20} more")
     if not args.apply:
-        print("\n(dry-run) add --apply to write a tags: block into each entry's frontmatter.")
+        print("\n(dry-run) add --apply to stamp each card's Dewey call number (e.g. 400.03 HAPA)")
+        print(f"and grow the accession register ({core.CATALOGUE_NAME}).")
         return
-    done = core.apply_tag(plan)
-    print(f"\n[ok] tagged {done} entr{'y' if done == 1 else 'ies'} "
-          "(id · date · project · keywords · size). Re-run search/ask — recall now reads tags + body.")
+    done = core.apply_tag(library, plan, register)
+    subjects = sum(len(v) for v in register.values())
+    print(f"\n[ok] catalogued {done} card{'s' if done != 1 else ''} — "
+          f"{subjects} subjects across {len(register)} classes in the register.")
+    print("     call · date · project · keywords · size — recall reads tags + body.")
 
 
 def cmd_ask(args: argparse.Namespace) -> None:

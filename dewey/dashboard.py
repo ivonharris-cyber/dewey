@@ -20,7 +20,7 @@ import re
 from collections import Counter
 from pathlib import Path
 
-from . import brain3d, core, connectors
+from . import brain3d, core, connectors, live_stats
 
 NOTES_DIR = "notes"
 _NOTE_MAX = 6000
@@ -71,13 +71,22 @@ def write_notes(library: Path, out_dir: Path) -> int:
 
 
 def _load_stats(claude_dir: Path) -> dict:
-    p = Path(claude_dir) / "stats-cache.json"
-    if not p.exists():
-        return {}
+    """MEASURED stats: live transcript scan + the frozen cache's pre-cutoff history.
+
+    Never the stats-cache alone — it freezes (last froze 2026-06-10) and showing it
+    as 'today' put false numbers on the cockpit. live_stats.measured() counts the
+    same transcripts the Claude Desktop app measures and stamps its source.
+    """
     try:
-        return json.loads(p.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return {}
+        return live_stats.measured(Path(claude_dir))
+    except Exception:  # noqa: BLE001 — a stats failure must never kill the cockpit build
+        p = Path(claude_dir) / "stats-cache.json"
+        try:
+            stale = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+        stale["source"] = f"frozen-cache-only(as-of {stale.get('lastComputedDate', '?')})"
+        return stale
 
 
 def _load_tasks(out_dir: Path) -> list:
@@ -136,6 +145,8 @@ def assemble_data(library: Path, claude_dir: Path, out_dir: Path) -> dict:
             "firstSession": stats.get("firstSessionDate", ""),
             "brainNodes": len(graph["nodes"]),
             "brainLinks": len(graph["links"]),
+            "asOf": stats.get("lastComputedDate", ""),
+            "source": stats.get("source", ""),
         },
         "trend": trend,
         "modelTokens": model_tokens,
@@ -420,7 +431,8 @@ document.getElementById('stats').innerHTML = [
   ['daysActive','DAYS ACTIVE',false],['sessions','SESSIONS',false],
   ['messages','MESSAGES',false],['toolCalls','TOOL CALLS',false],
   ['tokensOut','TOKENS OUT',true],['brainNodes','BRAIN NODES',false],
-].map(([k,label,g])=>`<div class="stat"><div class="n ${g?'g':''}">${fmt(S[k])}</div><div class="k">${label}</div></div>`).join('');
+].map(([k,label,g])=>`<div class="stat"><div class="n ${g?'g':''}">${fmt(S[k])}</div><div class="k">${label}</div></div>`).join('')
+  + `<div class="stat" style="grid-column:1/-1"><div class="k" title="${S.source||''}">measured ${S.asOf||'?'} · ${(S.source||'').startsWith('live')?'LIVE':'STALE CACHE'}</div></div>`;
 const tl = document.getElementById('tasklist');
 const TOOL_VERB={Read:'reading',Edit:'editing',Write:'writing',MultiEdit:'editing',Bash:'running',PowerShell:'running',
   Grep:'searching',Glob:'finding',WebSearch:'searching the web',WebFetch:'fetching',Task:'delegating an agent',

@@ -139,11 +139,11 @@ def update_state(library: Path, *, project: Optional[str] = None, last: Optional
 
 
 def _tag_for_project(library: Path, project: str) -> str:
-    """The tag id of the freshest entry whose tags.project matches (best-effort)."""
+    """The call number of the freshest entry whose tags.project matches (best-effort)."""
     if not project:
         return ""
     best = ""
     for e in core.library_entries(library):
-        if e.tags.get("project", "").lower() == project.lower() and e.tags.get("id"):
-            best = e.tags["id"]
+        if e.tags.get("project", "").lower() == project.lower():
+            best = e.tags.get("call") or e.tags.get("id") or best
     return best

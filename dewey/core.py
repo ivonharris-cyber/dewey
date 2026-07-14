@@ -6,7 +6,6 @@ No secret values are ever read or printed — `doctor` checks git-tracking and
 """
 from __future__ import annotations
 
-import base64
 import hashlib
 import json
 import os
@@ -582,7 +581,7 @@ class Entry:
 # Schema (Ivon's 7 + a stable id): id · date · project · keywords · size ·
 # last_command · github · notion. Parsed dependency-free; absent tags => today's
 # behaviour unchanged.
-_TAG_KEYS = ("id", "date", "project", "keywords", "size", "last_command", "github", "notion")
+_TAG_KEYS = ("call", "date", "project", "keywords", "size", "last_command", "github", "notion")
 _TAG_STOP = {
     "the", "a", "an", "of", "for", "to", "and", "or", "in", "on", "is", "it", "this",
     "that", "with", "was", "are", "be", "as", "at", "by", "from", "has", "have", "not",
@@ -695,13 +694,44 @@ def read_library_entry(library: Path, name: str) -> Optional[str]:
     return None
 
 
-# --- tag: backfill the tags block across a library (tooling, never hand-edit) --
+# --- tag: catalogue the library with REAL Dewey-decimal call numbers ----------
+#
+# A call number is a MEANINGFUL shelf address, not a barcode:
+#     400.03 HAPA   =  class 400 (projects) · subject #3 in the register · cutter HAPA
+# The subject register (_CATALOGUE.json, beside the library) is an append-only
+# accession catalogue: the first subject filed in a class gets .01, the next .02 —
+# and a number, once assigned, is NEVER reshuffled. Like sits with like: every
+# hapai card carries 400.03, so the shelf orders itself.
+
+CATALOGUE_NAME = "_CATALOGUE.json"
 
 
-def short_id(path: Path) -> str:
-    """A stable 6-char base32 handle for an entry, deterministic from its canonical path."""
-    digest = hashlib.sha256(str(path.resolve()).encode("utf-8")).digest()
-    return base64.b32encode(digest).decode("ascii")[:6]
+def load_catalogue(library: Path) -> dict:
+    """The accession register: {class: {subject: NN}}. Missing file = empty register."""
+    try:
+        return json.loads((Path(library) / CATALOGUE_NAME).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def save_catalogue(library: Path, register: dict) -> Path:
+    path = Path(library) / CATALOGUE_NAME
+    _atomic_write(path, json.dumps(register, indent=2, sort_keys=True))
+    return path
+
+
+def call_number(register: dict, klass: str, subject: str) -> str:
+    """Assign (or recall) the call number for a subject within a class.
+
+    Accession rule: an unseen subject gets the next decimal in its class and the
+    register grows; a seen subject always gets the same number back.
+    """
+    class_num = (klass.split("-", 1)[0] or "000")[:3]
+    shelf = register.setdefault(class_num, {})
+    if subject not in shelf:
+        shelf[subject] = max(shelf.values(), default=0) + 1
+    cutter = re.sub(r"[^a-z0-9]", "", subject.lower())[:4].upper() or "MISC"
+    return f"{class_num}.{shelf[subject]:02d} {cutter}"
 
 
 def _strip_frontmatter(text: str) -> str:
@@ -726,22 +756,23 @@ def _keywords(body: str, stem: str, k: int = 6) -> list[str]:
     return ranked[:k]
 
 
-def build_entry_tags(entry: Entry, text: str) -> dict:
-    """Derive tags for one entry from disk facts + content (no fabricated github/notion).
+def build_entry_tags(entry: Entry, text: str, register: dict) -> dict:
+    """Derive the card's spine label from disk facts + the accession register.
 
-    id/date/size are written ONCE and preserved thereafter, so re-running `tag` is a
-    no-op (and the id stays a stable handle). Keywords come from the body only.
+    call/date/size are written ONCE and preserved thereafter, so re-running `tag`
+    is a no-op and every number stays stable. Keywords come from the body only.
+    Fields we can't derive (last_command/github/notion) are carried, never invented.
     """
     st = entry.path.stat()
     existing = entry.tags
+    subject = artery_key(entry.path.stem)
     tags = {
-        "id": existing.get("id") or short_id(entry.path),
+        "call": existing.get("call") or call_number(register, entry.klass, subject),
         "date": existing.get("date") or datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d"),
-        "project": artery_key(entry.path.stem),
+        "project": subject,
         "keywords": ", ".join(_keywords(_strip_frontmatter(text), entry.path.stem)),
         "size": existing.get("size") or f"{st.st_size / 1024:.1f}kb",
     }
-    # Carry through any human-supplied fields we can't derive — never invent them.
     for key in ("last_command", "github", "notion"):
         if existing.get(key):
             tags[key] = existing[key]
@@ -790,8 +821,13 @@ class TagPlan:
     unchanged: int
 
 
-def plan_tag(library: Path) -> TagPlan:
-    """Plan a tag backfill over every library entry; skip entries already correctly tagged."""
+def plan_tag(library: Path) -> tuple[TagPlan, dict]:
+    """Plan the catalogue pass over every entry; returns (plan, grown register).
+
+    Entries file in sorted path order, so accession numbers are deterministic.
+    Already-catalogued entries keep their call number untouched (accession law).
+    """
+    register = load_catalogue(library)
     targets: list[tuple[Path, str]] = []
     unchanged = 0
     for e in library_entries(library):
@@ -799,22 +835,23 @@ def plan_tag(library: Path) -> TagPlan:
             text = e.path.read_text(encoding="utf-8", errors="ignore")
         except OSError:
             continue
-        new_text = upsert_tags(text, build_entry_tags(e, text))
+        new_text = upsert_tags(text, build_entry_tags(e, text, register))
         if new_text != text:
             targets.append((e.path, new_text))
         else:
             unchanged += 1
-    return TagPlan(targets, unchanged)
+    return TagPlan(targets, unchanged), register
 
 
-def apply_tag(plan: TagPlan) -> int:
-    """Write the planned tag blocks atomically; returns the number of entries tagged."""
+def apply_tag(library: Path, plan: TagPlan, register: dict) -> int:
+    """Write the planned spine labels atomically + persist the accession register."""
     done = 0
     for path, new_text in plan.targets:
         if path.is_symlink() or not path.is_file():
             continue
         _atomic_write(path, new_text)
         done += 1
+    save_catalogue(library, register)
     return done
 
 

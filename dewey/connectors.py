@@ -271,6 +271,15 @@ def unlock(passphrase: str) -> Vault:
 
 # ── Fuel gauge (token spend) + Dewey MPG (recall savings) ───────────────────
 def _load_stats() -> dict:
+    """MEASURED: live transcript scan + frozen-cache pre-cutoff history — never the
+    frozen stats-cache alone (it froze 2026-06-10 and lied a month backwards)."""
+    try:
+        from . import live_stats
+        m = live_stats.measured(STATS.parent)  # same dir as the cache → tests can redirect it
+        if m:
+            return m
+    except Exception:  # noqa: BLE001 — stats must never kill the cockpit feed
+        pass
     try:
         return json.loads(STATS.read_text(encoding="utf-8"))
     except (OSError, ValueError):
