@@ -123,10 +123,35 @@ to bytes.
 | `dewey micronise` | Replace shelved silo files with pointers (reversible; never touches `MEMORY.md`) |
 | `dewey checkout` / `checkin` | Restore an entry to full content, then re‑shrink it after edits |
 | `dewey ask` | Ask the library one question; get back only the entries that answer it |
+| `dewey health` | Read‑only cross‑drive sweep: the brain checks its own hygiene (duplicates, orphans, superseded, secrets) |
 
 Entries are classified first by type — an established **fact** vs. a **proposal / idea / thought** — then
 by subject in a Dewey `000`–`900` range. When an idea ships, it re‑files from *idea* to *fact*. That split
 is exactly what the cockpit's Facts / Fiction panels render.
+
+### Brain health — the whole‑system sweep
+
+`dewey health` walks your drives **read‑only** and tells the brain about itself. It never modifies, moves,
+or deletes a scanned file — its only output is a report plus a machine task board your cleanup agents action
+*with approval*.
+
+```bash
+dewey health                                   # default: sweep C:\ D:\ F:\ (existing)
+dewey health --root "D:\AI\obsidian-vault" --out .   # scope to one tree
+dewey health --bcp "G:\"                       # include a BCP/DCP backup drive
+```
+
+It flags four things and writes them to `BRAIN-HEALTH.md` (human) and `brain-health-tasks.json` (for the
+Hermes agents):
+
+| Flag | Meaning |
+|---|---|
+| **duplicate** | Same bytes in two places. A copy that spans two drives (e.g. `D:` and the `F:` SATA backup) is a **healthy backup**, counted separately; only extra copies **within one drive** become dedupe candidates. |
+| **orphan** | A memory‑like note that links to nothing and is linked by nothing — invisible to recall. |
+| **superseded** | A note under a wiped/archived/retired path — history, not live memory. |
+| **secret** | A note whose body carries secret‑like values (same detector as `dewey scrub`) — paths only, **never the value** — so it can be rotated to `.env`. |
+
+A `--max-files` cap guards a full‑drive run and a hit is **reported, never silent**.
 
 ### Reference Desk (MCP)
 
@@ -163,6 +188,8 @@ already knows itself. Just say **"Lets go."**
 - The repository is code only — never your data. Memory, `.env`, and credential files are excluded by
   `.gitignore` and skipped by `sync`/`micronise`.
 - `dewey doctor` detects leaks (tracked `.env`, missing ignore rules) without printing any secret value.
+- `dewey health` additionally finds notes whose **body** carries secret‑like values across your drives —
+  reporting the file paths and a count only, never the value itself, so they can be rotated to `.env`.
 - The cockpit's control surface is loopback‑only and token‑gated; the agent never posts anything outward
   without your approval.
 

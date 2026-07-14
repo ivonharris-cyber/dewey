@@ -2,6 +2,23 @@
 
 All notable changes to Dewey are documented here. This project follows [Semantic Versioning](https://semver.org).
 
+## [0.10.0] — 2026-07-14
+
+### Added
+- **`dewey health`** — a read-only cross-drive brain-health sweep (`dewey/health.py`). Walks the given roots
+  (default existing `C:\ D:\ F:\`, plus an optional `--bcp` backup drive), reads every `.md` once, and flags
+  four things so the brain knows its own hygiene:
+  - **duplicate** — byte-identical copies. Copies spanning two drives (e.g. `D:` and the `F:` SATA backup)
+    are counted as **healthy backup coverage**; only extra copies **within one drive** are dedupe candidates.
+  - **orphan** — a memory-like note with no wikilinks in or out (invisible to recall). Dewey's own
+    hub/index files (`_*.md`, `LIBRARY-INDEX.md`) are excluded.
+  - **superseded** — notes under wiped/archived/retired paths.
+  - **secret** — notes whose body carries secret-like values (reuses `core.scrub_text`); reports paths and a
+    count only, **never the value**, for rotation to `.env`.
+  - Writes `BRAIN-HEALTH.md` (human) and `brain-health-tasks.json` (a task board the Hermes agents action
+    with approval — never auto-delete). A `--max-files` cap is reported on hit, never silent.
+  - Strictly read-only over scanned drives. New tests in `tests/test_health.py` (6).
+
 ## [0.9.4] — 2026-07-11
 
 ### Changed

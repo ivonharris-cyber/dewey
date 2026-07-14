@@ -6,7 +6,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import __version__, core, graph, brain3d, dashboard, connectors
+from . import __version__, core, graph, brain3d, dashboard, connectors, health
 
 def _selected(silos, name, want_all):
     """Yield (silo, file) pairs matching a filename, or every file with --all."""
@@ -51,6 +51,26 @@ def cmd_doctor(args: argparse.Namespace) -> None:
         if h.env_files:
             print(f"       env: {', '.join(h.env_files)}  (ignored={h.gitignore_covers_env})")
     print(f"\n{leaks} repo(s) need attention.")
+
+
+def cmd_health(args: argparse.Namespace) -> None:
+    roots = [Path(r).resolve() for r in args.root] if args.root else health.default_roots(args.bcp)
+    if not roots:
+        print("error: no roots to sweep (none of C:/D:/F: exist — pass --root <dir>)")
+        raise SystemExit(2)
+    print(f"Sweeping (read-only) for .md across: {', '.join(str(r) for r in roots)}")
+    print("This can take a while on a full drive — pruning build/system dirs.\n")
+    snap = health.sweep(roots, max_files=args.max_files)
+    report, tasks = health.write_reports(snap, Path(args.out).resolve())
+    redundant = sum(1 for n in snap.notes if n.redundant)
+    secrets = sum(1 for n in snap.notes if n.secret_hits)
+    orphans = sum(1 for n in snap.notes if n.orphan)
+    superseded = sum(1 for n in snap.notes if n.superseded)
+    print(f"[ok] read {len(snap.notes)} notes"
+          + ("  ⚠️ FILE CAP HIT (results truncated — raise --max-files)" if snap.capped else ""))
+    print(f"     dedupe={redundant}  secrets={secrets}  superseded={superseded}  orphans={orphans}")
+    print(f"     report: {core.portable(report)}")
+    print(f"     tasks : {core.portable(tasks)}  (Hermes actions these — with approval, never auto-delete)")
 
 
 def cmd_sync(args: argparse.Namespace) -> None:
@@ -445,6 +465,13 @@ def main(argv: list[str] | None = None) -> None:
     doctor = sub.add_parser("doctor", help="scan repositories for committed .env files")
     doctor.add_argument("root", nargs="?", default=".", help="directory containing git repositories")
     doctor.set_defaults(fn=cmd_doctor)
+
+    health_p = sub.add_parser("health", help="read-only cross-drive brain-health sweep (duplicates, orphans, superseded, secrets)")
+    health_p.add_argument("--root", action="append", help="a drive/dir to sweep (repeatable; overrides the C:/D:/F: default)")
+    health_p.add_argument("--bcp", help="path to the BCP/DCP backup drive to include in the default sweep")
+    health_p.add_argument("--out", default=".", help="where to write BRAIN-HEALTH.md + brain-health-tasks.json (default: cwd)")
+    health_p.add_argument("--max-files", type=int, default=60000, help="safety cap on notes read (a hit is reported, never silent)")
+    health_p.set_defaults(fn=cmd_health)
 
     sync = sub.add_parser("sync", help="copy memory into a Markdown library (skips credentials; dry-run by default)")
     sync.add_argument("--to", required=True, help="target library directory")
