@@ -6,7 +6,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import __version__, core, graph, brain3d, dashboard, connectors, health, compress
+from . import __version__, core, graph, brain3d, dashboard, connectors, health, compress, state
 
 def _selected(silos, name, want_all):
     """Yield (silo, file) pairs matching a filename, or every file with --all."""
@@ -289,6 +289,32 @@ def cmd_dashboard(args: argparse.Namespace) -> None:
     print(f"     Serve the folder and open it fullscreen (vendored libs beside it).")
 
 
+def cmd_state(args: argparse.Namespace) -> None:
+    library = Path(args.to).resolve()
+    if not library.is_dir():
+        print(f"error: {library} is not a library directory (run sync first)")
+        raise SystemExit(2)
+    writing = any(v is not None for v in (args.project, args.last, args.loop, args.notion, args.tag))
+    if writing:
+        st, path = state.update_state(
+            library, project=args.project, last=args.last,
+            loops=args.loop, notion=args.notion, tag=args.tag,
+        )
+        print(f"[ok] STATE updated: {core.portable(path)}")
+    else:
+        st = state.read_state(library)
+        if st is None:
+            print("no STATE yet — set it, e.g:\n"
+                   '  dewey state --to <library> --project ngati-toa --last "submitted the pepeha"')
+            return
+    print(f"\n  Project:     {st.project or '—'}")
+    print(f"  As of:       {st.date or '—'}")
+    print(f"  Last action: {st.last or '—'}")
+    print(f"  Notion:      {st.notion or '—'}")
+    print(f"  Active tag:  {st.tag or '—'}")
+    print("  Open loops:  " + (", ".join(st.loops) if st.loops else "(none)"))
+
+
 def cmd_tag(args: argparse.Namespace) -> None:
     library = Path(args.to).resolve()
     if not library.is_dir():
@@ -559,6 +585,15 @@ def main(argv: list[str] | None = None) -> None:
     graph_p = sub.add_parser("graph", help="build a queryable knowledge graph over the library (via Graphify; derived cache)")
     graph_p.add_argument("--to", required=True, help="the library directory created by sync")
     graph_p.set_defaults(fn=cmd_graph)
+
+    state_p = sub.add_parser("state", help="read/write the canonical STATE entry — one truth, read first every session")
+    state_p.add_argument("--to", required=True, help="the library directory created by sync")
+    state_p.add_argument("--project", help="set the current project")
+    state_p.add_argument("--last", help="set the last action")
+    state_p.add_argument("--loop", action="append", help="set an open loop (repeatable; replaces the list)")
+    state_p.add_argument("--notion", help="set the Notion pointer (the TRUTH artifact)")
+    state_p.add_argument("--tag", help="set the active project's tag id (else looked up by project)")
+    state_p.set_defaults(fn=cmd_state)
 
     tag = sub.add_parser("tag", help="backfill a tags block (id·date·project·keywords·size) into every library entry")
     tag.add_argument("--to", required=True, help="the library directory created by sync")

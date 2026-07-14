@@ -122,6 +122,7 @@ to bytes.
 | `dewey weave --to DIR` | Cluster + colour the library into a Graphify‑style Obsidian graph |
 | `dewey micronise` | Replace shelved silo files with pointers (reversible; never touches `MEMORY.md`) |
 | `dewey checkout` / `checkin` | Restore an entry to full content, then re‑shrink it after edits |
+| `dewey state --to DIR` | Read/write the canonical STATE entry — one truth, read first every session |
 | `dewey tag --to DIR` | Backfill a `tags` block (id · date · project · keywords · size) into every entry |
 | `dewey ask` | Ask one question; get back only the entries that answer it (tag‑ and body‑aware; `--compress` for token savings) |
 | `dewey health` | Read‑only cross‑drive sweep: the brain checks its own hygiene (duplicates, orphans, superseded, secrets) |
@@ -129,6 +130,21 @@ to bytes.
 Entries are classified first by type — an established **fact** vs. a **proposal / idea / thought** — then
 by subject in a Dewey `000`–`900` range. When an idea ships, it re‑files from *idea* to *fact*. That split
 is exactly what the cockpit's Facts / Fiction panels render.
+
+### One truth — STATE + the session loop
+
+`dewey state` keeps a single always-current entry at `<library>/000-meta/STATE.md`: current project, date,
+last action, open loops, a Notion pointer, and the active project's tag id.
+
+```bash
+dewey state --to <library> --project ngati-toa --last "submitted the pepeha" --loop "confirm tupuna"
+dewey state --to <library>          # show the one truth
+```
+
+The [session hooks](hooks/README.md) wire it in (opt-in — they change how every session boots): a
+**SessionStart** hook injects STATE so the assistant opens knowing where things stand, and a **Stop** hook
+leaves an assisted paper-trail reminder that a dated check-in was written. Naming a project with no `--tag`
+looks up the active project's tag id automatically.
 
 ### Tags — the roaming fix
 

@@ -2,6 +2,19 @@
 
 All notable changes to Dewey are documented here. This project follows [Semantic Versioning](https://semver.org).
 
+## [0.12.0] — 2026-07-14
+
+### Added
+- **`dewey state`** + new `dewey/state.py` — the canonical STATE entry at `<library>/000-meta/STATE.md`:
+  one always-current truth (project · date · last action · open loops · Notion pointer · active tag id).
+  Read with `dewey state --to <lib>`; write/merge with `--project/--last/--loop/--notion/--tag` (only named
+  fields change; date refreshed to today; the active project's tag id is looked up when a project is named
+  but no tag given). Dependency-free. 5 tests.
+- **Session hooks** (`hooks/ivon-session-start.sh`, `hooks/ivon-paper-trail.sh`, `hooks/README.md`) —
+  reference copies of the assisted one-truth loop. SessionStart injects the IVON PROTOCOL **plus the
+  canonical STATE**; Stop leaves an assisted paper-trail reminder (never blocks unless
+  `DEWEY_PAPERTRAIL_BLOCK=1`). Installing them is opt-in.
+
 ## [0.11.0] — 2026-07-14
 
 ### Added
