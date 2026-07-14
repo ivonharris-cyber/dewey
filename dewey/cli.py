@@ -338,6 +338,36 @@ def cmd_tag(args: argparse.Namespace) -> None:
     print("     call · date · project · keywords · size — recall reads tags + body.")
 
 
+def cmd_call(args: argparse.Namespace) -> None:
+    library = Path(args.to).resolve()
+    if not library.is_dir():
+        print(f"error: {library} is not a library directory (run sync first)")
+        raise SystemExit(2)
+    hits = core.resolve_call(library, args.number)
+    if not hits:
+        print(f"nothing on the shelf at '{args.number}'. Try a class (e.g. 400) or `dewey ask`.")
+        raise SystemExit(1)
+    if len(hits) > 1:
+        # a shelf/class was named — hand back the shelf list, call-number ordered
+        print(f"shelf {args.number.strip().upper()} — {len(hits)} cards:\n")
+        for e in hits:
+            print(f"  {e.tags.get('call', '?'):14} {e.name}")
+        print(f"\nWithdraw one:  dewey call \"{hits[0].tags.get('call', '')}\" --to <library>")
+        return
+    e = hits[0]
+    text = e.path.read_text(encoding="utf-8", errors="ignore")
+    print(f"═══ {e.tags.get('call', '')}  ·  {e.name}  [{e.klass}]  ═══\n")
+    if args.compress and args.reason:
+        comp = compress.compress(text, args.reason)
+        if comp.ok:
+            print(f"🧠 SuperCompress [{comp.policy}] against \"{args.reason}\": "
+                  f"{comp.original_tokens} → {comp.kept_tokens} tokens ({comp.saved_pct}% lighter)\n")
+            print(comp.text)
+            return
+        print(f"(compress unavailable: {comp.note})\n")
+    print(text)
+
+
 def cmd_ask(args: argparse.Namespace) -> None:
     library = Path(args.to).resolve()
     if not library.is_dir():
@@ -602,6 +632,13 @@ def main(argv: list[str] | None = None) -> None:
     tag.add_argument("--to", required=True, help="the library directory created by sync")
     tag.add_argument("--apply", action="store_true", help="write the tags block into each entry (default: dry-run)")
     tag.set_defaults(fn=cmd_tag)
+
+    call = sub.add_parser("call", help="withdraw a card by its Dewey call number (e.g. 400.68), or list a shelf (e.g. 400)")
+    call.add_argument("number", help="a call number: '400.68 PROT' (exact), '400.68' (decimal), or '400' (shelf)")
+    call.add_argument("--to", required=True, help="the library directory created by sync")
+    call.add_argument("--for", dest="reason", help="the question to SuperCompress the withdrawn card against")
+    call.add_argument("--compress", action="store_true", help="squeeze the card against --for on the way out (optional tool)")
+    call.set_defaults(fn=cmd_call)
 
     ask = sub.add_parser("ask", help="find the few entries that answer a question (graph-guided; falls back to keyword)")
     ask.add_argument("question", help="a plain-language question about your memory")

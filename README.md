@@ -123,7 +123,8 @@ to bytes.
 | `dewey micronise` | Replace shelved silo files with pointers (reversible; never touches `MEMORY.md`) |
 | `dewey checkout` / `checkin` | Restore an entry to full content, then re‑shrink it after edits |
 | `dewey state --to DIR` | Read/write the canonical STATE entry — one truth, read first every session |
-| `dewey tag --to DIR` | Backfill a `tags` block (id · date · project · keywords · size) into every entry |
+| `dewey tag --to DIR` | Catalogue every card with a real Dewey **call number** (`400.68 PROT`) from an accession register |
+| `dewey call NUMBER --to DIR` | **Withdraw** a card by its call number (`400.68`), or list a shelf (`400`); `--compress` squeezes it |
 | `dewey ask` | Ask one question; get back only the entries that answer it (tag‑ and body‑aware; `--compress` for token savings) |
 | `dewey health` | Read‑only cross‑drive sweep: the brain checks its own hygiene (duplicates, orphans, superseded, secrets) |
 

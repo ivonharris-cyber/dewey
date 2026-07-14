@@ -2,6 +2,33 @@
 
 All notable changes to Dewey are documented here. This project follows [Semantic Versioning](https://semver.org).
 
+## [0.13.0] — 2026-07-14
+
+### Added
+- **Real Dewey-decimal call numbers** (`core.py`) — the random 6-char barcode `id` is **removed**. Every
+  card now carries a meaningful spine label, `400.68 PROT` = `class . accession-decimal CUTTER`, assigned
+  from an append-only **accession register** (`_CATALOGUE.json` beside the library). A number, once
+  assigned, never moves; like sits with like. `dewey tag` is now the catalogue pass (532 VRAIN cards →
+  322 subjects across 6 classes).
+- **`dewey call <number>`** (`core.resolve_call` + `cmd_call`) — the **circulation desk**: withdraw a card
+  by its call number. `400.68 PROT` (exact) / `400.68` (decimal) / `400` (the whole shelf, call-ordered).
+  `--for "<question>" --compress` squeezes the withdrawn card with SuperCompress on the way out (verified
+  live: 339 → 118 tokens). This is what makes it a *library* — look up by number, withdraw the book — not a
+  catalogue.
+- **`dewey/live_stats.py` — measured stats, never a frozen-cache lie.** The cockpit's session/day/token
+  numbers are now MEASURED from the session transcripts (`~/.claude/projects/**/*.jsonl`) — the same source
+  the Claude Desktop app reads — merged with the frozen `stats-cache.json` only for the history *before* it
+  froze (`<= 2026-06-10`), with no double-counting. Incremental per-file cache (2.6s first scan, instant
+  after). `dashboard.py` + `connectors.token_burn` both consume it; the cockpit stamps
+  **"measured <date> · LIVE"** (or STALE CACHE) on the stats tile so a frozen number can never again pose as
+  today. Was: 36 days / 71 sessions / 44.7M tokens (a June-10 corpse). Now: 65 days / 466 sessions / 133.9M,
+  as-of the actual day.
+
+### Changed
+- `dewey ask` ranking now weights **name/description over body** and demotes index files, so a precise small
+  card (e.g. `screenshots-location.md`) beats a bloated `MEMORY.md` that merely mentions the term.
+- Entry tag key `id` → **`call`** throughout (parser, search haystack, STATE lookup).
+
 ## [0.12.0] — 2026-07-14
 
 ### Added

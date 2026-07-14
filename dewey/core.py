@@ -694,6 +694,39 @@ def read_library_entry(library: Path, name: str) -> Optional[str]:
     return None
 
 
+# --- circulation desk: walk up with a call number, withdraw the card ----------
+
+
+def resolve_call(library: Path, call: str) -> list[Entry]:
+    """Look up cards by call number — this is what makes it a library, not a catalogue.
+
+    Three granularities, narrowest first:
+      '400.68 PROT'  exact card
+      '400.68'       the card at that accession decimal
+      '400'          the whole shelf (a class), call-number ordered
+
+    A bare number is a prefix; a number+cutter is exact. Returns [] for a miss.
+    """
+    q = " ".join(call.strip().upper().split())
+    if not q:
+        return []
+    exact, decimal, shelf = [], [], []
+    for e in library_entries(library):
+        c = (e.tags.get("call") or "").upper()
+        if not c:
+            continue
+        num = c.split(" ", 1)[0]  # the '400.68' part
+        if c == q:
+            exact.append((c, e))
+        elif num == q:
+            decimal.append((c, e))
+        elif num.startswith(q + ".") or num.split(".", 1)[0] == q:
+            shelf.append((c, e))
+    chosen = exact or decimal or shelf
+    chosen.sort(key=lambda ce: ce[0])
+    return [e for _, e in chosen]
+
+
 # --- tag: catalogue the library with REAL Dewey-decimal call numbers ----------
 #
 # A call number is a MEANINGFUL shelf address, not a barcode:
