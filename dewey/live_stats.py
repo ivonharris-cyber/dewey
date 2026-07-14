@@ -42,7 +42,7 @@ def _summarise_file(path: Path) -> dict:
     days_tools: dict[str, int] = defaultdict(int)
     model_tokens: dict[str, int] = defaultdict(int)
     day_model_tokens: dict[str, dict] = defaultdict(lambda: defaultdict(int))
-    hours: dict[str, int] = defaultdict(int)
+    day_hours: dict[str, dict] = defaultdict(lambda: defaultdict(int))  # per-day hour histogram
     messages = 0
     first_ts = last_ts = ""
     try:
@@ -56,6 +56,8 @@ def _summarise_file(path: Path) -> dict:
                     d = json.loads(line)
                 except ValueError:
                     continue
+                if not isinstance(d, dict):
+                    continue  # a bare array/string line is not a message record
                 typ = d.get("type")
                 if typ not in ("user", "assistant"):
                     continue
@@ -68,10 +70,14 @@ def _summarise_file(path: Path) -> dict:
                 if day:
                     days_msgs[day] += 1
                     if hour:
-                        hours[hour] += 1
+                        day_hours[day][hour] += 1
                 if typ == "assistant":
-                    m = d.get("message") or {}
-                    usage = m.get("usage") or {}
+                    m = d.get("message")
+                    if not isinstance(m, dict):
+                        m = {}                       # `message` can be a raw string in some formats
+                    usage = m.get("usage")
+                    if not isinstance(usage, dict):
+                        usage = {}
                     out_tok = usage.get("output_tokens", 0) or 0
                     model = m.get("model") or "unknown"
                     if out_tok:
@@ -92,7 +98,7 @@ def _summarise_file(path: Path) -> dict:
         "days_tools": dict(days_tools),
         "model_tokens": dict(model_tokens),
         "day_model_tokens": {d: dict(m) for d, m in day_model_tokens.items()},
-        "hours": dict(hours),
+        "day_hours": {d: dict(h) for d, h in day_hours.items()},
     }
 
 
@@ -150,7 +156,7 @@ def scan(claude_dir: Optional[Path] = None, *, use_cache: bool = True) -> dict:
     days_tools: dict[str, int] = defaultdict(int)
     model_usage: dict[str, int] = defaultdict(int)
     day_model: dict[str, dict] = defaultdict(lambda: defaultdict(int))
-    hours: dict[str, int] = defaultdict(int)
+    day_hours: dict[str, dict] = defaultdict(lambda: defaultdict(int))
     total_messages = 0
     first_ts = ""
     for rel, e in fresh.items():
@@ -168,9 +174,14 @@ def scan(claude_dir: Optional[Path] = None, *, use_cache: bool = True) -> dict:
         for d, mm in (s.get("day_model_tokens") or {}).items():
             for m, n in mm.items():
                 day_model[d][m] += n
-        for h, n in (s.get("hours") or {}).items():
-            hours[h] += n
+        for d, hh in (s.get("day_hours") or {}).items():
+            for h, n in hh.items():
+                day_hours[d][h] += n
 
+    hours: dict[str, int] = defaultdict(int)
+    for hh in day_hours.values():
+        for h, n in hh.items():
+            hours[h] += n
     daily_activity = [{"date": d, "messageCount": days_msgs[d], "toolCallCount": days_tools.get(d, 0)}
                       for d in sorted(days_msgs)]
     daily_model_tokens = [{"date": d, "tokensByModel": dict(day_model[d])} for d in sorted(day_model)]
@@ -187,6 +198,7 @@ def scan(claude_dir: Optional[Path] = None, *, use_cache: bool = True) -> dict:
         "modelUsage": {m: {"outputTokens": n} for m, n in
                        sorted(model_usage.items(), key=lambda kv: -kv[1])},
         "hourCounts": dict(hours),
+        "dayHours": {d: dict(h) for d, h in day_hours.items()},  # per-day, so merge can respect the cutoff
     }
 
 
@@ -227,10 +239,16 @@ def merge_with_cache(live: dict, cache: dict) -> dict:
                           for d in live.get("dailyActivity", []) if d.get("date", "") > cutoff)
     firsts = [x for x in (cache.get("firstSessionDate", ""), live.get("firstSessionDate", "")) if x]
 
+    # hourCounts: the cache owns the pre-cutoff distribution (complete up to when it froze);
+    # add ONLY the live hours from days strictly after the cutoff, so overlapping old
+    # transcripts still on disk are not double-counted.
     hours: dict[str, int] = defaultdict(int)
-    for src in (cache.get("hourCounts") or {}, live.get("hourCounts") or {}):
-        for h, n in src.items():
-            hours[str(h).zfill(2)[:2]] += n
+    for h, n in (cache.get("hourCounts") or {}).items():
+        hours[str(h).zfill(2)[:2]] += n
+    for day, hh in (live.get("dayHours") or {}).items():
+        if day > cutoff:
+            for h, n in hh.items():
+                hours[str(h).zfill(2)[:2]] += n
 
     return {
         "source": f"live-transcripts + frozen-cache(<= {cutoff})",

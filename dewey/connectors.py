@@ -343,9 +343,15 @@ def token_burn(today: Optional[date] = None) -> dict:
     budget = read_budget()
     start, nxt = _cycle_bounds(budget.get("billing_day"), today)
     cycle = sum(t for d, t in daily if d and d >= start.isoformat())
+    # STALE = we're NOT on live measured data (fell back to the frozen cache). With live
+    # transcript stats the source starts "live-..."; the date is always today then, so the
+    # old date-age test can't detect staleness — key off the source instead.
+    source = stats.get("source", "")
+    is_live = source.startswith("live")
+    stale = (not is_live) and bool(as_of and as_of < (today - timedelta(days=3)).isoformat())
     out = {
-        "available": True, "as_of": as_of,
-        "stale": bool(as_of and as_of < (today - timedelta(days=3)).isoformat()),
+        "available": True, "as_of": as_of, "source": source, "live": is_live,
+        "stale": stale,
         "cumulative": cumulative, "cycle_tokens": cycle,
         "avg_day": int(avg_day), "peak": max(totals) if totals else 0, "spark": recent,
         "cycle_start": start.isoformat(), "next_reset": nxt.isoformat(),

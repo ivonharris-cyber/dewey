@@ -578,8 +578,8 @@ class Entry:
 
 
 # --- tags: an optional, backward-compatible frontmatter block -----------------
-# Schema (Ivon's 7 + a stable id): id · date · project · keywords · size ·
-# last_command · github · notion. Parsed dependency-free; absent tags => today's
+# Schema: call · date · project · keywords · size · last_command · github · notion.
+# `call` is the Dewey call number (the spine label); the old random `id` is retired. Parsed dependency-free; absent tags => today's
 # behaviour unchanged.
 _TAG_KEYS = ("call", "date", "project", "keywords", "size", "last_command", "github", "notion")
 _TAG_STOP = {
@@ -609,6 +609,8 @@ def parse_tags(text: str) -> dict:
                 in_block = True
             continue
         # inside the block: indented `key: value` lines until the frontmatter dedents
+        if not s:
+            continue  # tolerate blank lines inside the block — don't drop the keys after them
         if (line[:1] in (" ", "\t")) and ":" in s:
             k, v = s.split(":", 1)
             tags[k.strip()] = v.strip().strip('"').strip("'")
@@ -619,9 +621,15 @@ def parse_tags(text: str) -> dict:
 
 def _parse_flow_tags(rest: str) -> dict:
     """Best-effort parse of an inline `{ id: x, keywords: [a, b], … }` tag mapping."""
-    body = rest.strip().lstrip("{").rstrip("}")
+    body = rest.strip()
+    if body.startswith("{"):
+        body = body[1:]
+    if body.endswith("}"):
+        body = body[:-1]   # strip ONE outer brace, not every trailing '}' (rstrip would eat url/{id})
     tags: dict[str, str] = {}
-    for m in re.finditer(r"(\w+)\s*:\s*(\[[^\]]*\]|\"[^\"]*\"|'[^']*'|[^,}]+)", body):
+    # value = a [list], a "quoted" string, or a run of chars that may itself contain {…} groups
+    # (so a literal like notion: url/{id} keeps its braces instead of terminating at the first }).
+    for m in re.finditer(r"(\w+)\s*:\s*(\[[^\]]*\]|\"[^\"]*\"|'[^']*'|(?:[^,{}]|\{[^}]*\})+)", body):
         tags[m.group(1).strip()] = m.group(2).strip().strip("[]\"'").strip()
     return tags
 
@@ -822,28 +830,33 @@ def render_tags_block(tags: dict) -> str:
 
 
 def upsert_tags(text: str, tags: dict) -> str:
-    """Insert or replace the `tags:` block inside frontmatter (idempotent), preserving the rest."""
+    """Insert or replace the `tags:` block inside frontmatter (idempotent), preserving the rest.
+
+    A file whose frontmatter opens with `---` but never closes is malformed — we leave it
+    UNTOUCHED rather than nest a second block and swallow its keys into the body.
+    """
     block = render_tags_block(tags)
     lines = text.splitlines()
     if lines and lines[0].strip() == "---":
         # find the closing fence, and strip any existing tags block within
         close = next((i for i in range(1, len(lines)) if lines[i].strip() == "---"), None)
-        if close is not None:
-            fm = lines[1:close]
-            cleaned: list[str] = []
-            skipping = False
-            for ln in fm:
-                s = ln.strip()
-                if skipping:
-                    if (ln[:1] in (" ", "\t")) and s:
-                        continue  # still inside the old indented tags block
-                    skipping = False
-                if s.lower().startswith("tags:"):
-                    skipping = True
-                    continue
-                cleaned.append(ln)
-            new_fm = cleaned + block.splitlines()
-            return "\n".join(["---", *new_fm, "---", *lines[close + 1:]]) + "\n"
+        if close is None:
+            return text  # unclosed frontmatter — never corrupt it
+        fm = lines[1:close]
+        cleaned: list[str] = []
+        skipping = False
+        for ln in fm:
+            s = ln.strip()
+            if skipping:
+                if not s or (ln[:1] in (" ", "\t")):
+                    continue  # blank OR indented lines are still inside the old tags block
+                skipping = False
+            if s.lower().startswith("tags:"):
+                skipping = True
+                continue
+            cleaned.append(ln)
+        new_fm = cleaned + block.splitlines()
+        return "\n".join(["---", *new_fm, "---", *lines[close + 1:]]) + "\n"
     # no frontmatter yet — create one carrying just the tags block
     return "\n".join(["---", block, "---", "", text.rstrip("\n")]) + "\n"
 

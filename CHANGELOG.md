@@ -2,6 +2,27 @@
 
 All notable changes to Dewey are documented here. This project follows [Semantic Versioning](https://semver.org).
 
+## [0.13.1] — 2026-07-14
+
+### Fixed
+Two independent code reviews caught real bugs shipped in 0.13.0 — all fixed, each locked with a
+regression test reproducing the exact trigger (80 tests green):
+- **`parse_tags` silently dropped every tag after a blank line** (block form) — now tolerates blank lines
+  inside the block instead of stopping. This was corrupting hand-authored cards and breaking idempotency.
+- **`upsert_tags` on a file with unclosed frontmatter** (opening `---`, no closing `---`) nested a second
+  block and swallowed the original keys into the body — now leaves malformed files untouched.
+- **`upsert_tags` blank line inside the OLD tags block** broke idempotency (the card never stabilised, was
+  rewritten every run) — blank lines inside the stripped block are now handled.
+- **`_parse_flow_tags` `rstrip('}')`** ate every trailing brace and the value regex terminated at the first
+  `}`, so a value like `notion: url/{id}` lost its braces — fixed the brace-strip and the value pattern.
+- **`live_stats` crashed the whole scan** on any assistant line whose `message` was a raw string (not a
+  dict) — AttributeError propagated out and silently fell back to the frozen cache; now guarded with
+  `isinstance` checks so one bad line can't kill the measurement.
+- **`live_stats.merge_with_cache` double-counted `hourCounts`** across the cache/live cutoff — now splits
+  hours per day and only adds live hours strictly after the cutoff (added `dayHours` to the scan output).
+- **`connectors.token_burn` `stale` flag was permanently `False`** once live stats stamp today's date — now
+  keyed off the data `source` (`stale` = we fell back to the frozen cache), plus a `live` boolean.
+
 ## [0.13.0] — 2026-07-14
 
 ### Added

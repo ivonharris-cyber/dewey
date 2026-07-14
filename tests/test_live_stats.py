@@ -76,6 +76,35 @@ class LiveStats(unittest.TestCase):
     def test_missing_projects_dir_is_empty_not_fake(self) -> None:
         self.assertEqual(live_stats.scan(self.claude / "nope"), {})
 
+    # --- regression tests for the review bugs -------------------------------
+
+    def test_bad_message_line_does_not_crash_scan(self) -> None:
+        # HIGH bug: an assistant line whose `message` is a raw string (not a dict) used to
+        # throw AttributeError and kill the whole scan → silent fallback to the frozen cache.
+        proj = self.claude / "projects" / "D--demo"
+        (proj / "cccc-bad.jsonl").write_text("\n".join([
+            '{"type":"assistant","timestamp":"2026-07-03T08:00:00Z","message":"a raw string summary"}',
+            _line("assistant", "2026-07-03T08:01:00Z", out=42),
+        ]) + "\n", encoding="utf-8")
+        s = live_stats.scan(self.claude, use_cache=False)   # must not raise
+        self.assertGreaterEqual(sum(m["outputTokens"] for m in s["modelUsage"].values()), 42)
+
+    def test_hourcounts_not_double_counted_across_cutoff(self) -> None:
+        # HIGH bug: merge added cache hourCounts + ALL live hourCounts, double-counting the
+        # overlap. Live has a pre-cutoff hour that the cache already recorded.
+        live = live_stats.scan(self.claude, use_cache=False)   # setUp data is 2026-07-01/02, hour 09,10
+        cache = {
+            "lastComputedDate": "2026-07-01",                  # cutoff mid-way through the live data
+            "totalSessions": 5, "totalMessages": 500,
+            "hourCounts": {"09": 100},                         # the cache already counted hour 09
+            "dailyActivity": [], "dailyModelTokens": [], "modelUsage": {},
+        }
+        m = live_stats.merge_with_cache(live, cache)
+        # hour 09 happened on 2026-07-01 (== cutoff, owned by cache) so live must NOT re-add it.
+        self.assertEqual(m["hourCounts"].get("09"), 100)
+        # hour 10 happened on 2026-07-02 (> cutoff): a user + an assistant message = 2.
+        self.assertEqual(m["hourCounts"].get("10"), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -90,6 +90,38 @@ class Tags(unittest.TestCase):
         hits = core.search_library(self.lib, "onda")
         self.assertTrue(any(e.name == "project_onda.md" for e in hits))
 
+    # --- regression tests for the review bugs -------------------------------
+
+    def test_parse_tags_tolerates_blank_line_in_block(self) -> None:
+        # HIGH bug: a blank line inside the block used to silently drop every key after it.
+        text = "---\ntags:\n  call: 400.01 ONDA\n\n  date: 2026-07-14\n  project: onda\n---\nbody\n"
+        tags = core.parse_tags(text)
+        self.assertEqual(tags.get("call"), "400.01 ONDA")
+        self.assertEqual(tags.get("date"), "2026-07-14")   # was dropped before the fix
+        self.assertEqual(tags.get("project"), "onda")
+
+    def test_upsert_leaves_unclosed_frontmatter_untouched(self) -> None:
+        # HIGH bug: opening --- with no closing --- used to nest a block and swallow keys.
+        broken = "---\ntitle: foo\nbody line with no closing fence\n"
+        out = core.upsert_tags(broken, {"call": "400.01 ONDA"})
+        self.assertEqual(out, broken)  # never corrupt a malformed file
+        self.assertIn("title: foo", out)
+
+    def test_upsert_idempotent_with_blank_line_in_old_block(self) -> None:
+        # MEDIUM bug: a blank line in the OLD tags block broke idempotency (never stabilised).
+        text = ("---\ndescription: x\ntags:\n  call: 400.01 ONDA\n\n  date: 2026-07-14\n"
+                "---\nbody\n")
+        once = core.upsert_tags(text, {"call": "400.01 ONDA", "date": "2026-07-14"})
+        twice = core.upsert_tags(once, {"call": "400.01 ONDA", "date": "2026-07-14"})
+        self.assertEqual(once, twice)                 # stable across runs
+        self.assertIn("description: x", once)         # non-tag frontmatter preserved
+
+    def test_parse_flow_tags_preserves_trailing_brace_value(self) -> None:
+        # MEDIUM bug: rstrip('}') ate the '}' inside a value like url/{id}.
+        tags = core.parse_tags("---\ntags: { call: 400.01 ONDA, notion: url/{id} }\n---\nbody\n")
+        self.assertEqual(tags.get("call"), "400.01 ONDA")
+        self.assertIn("{id}", tags.get("notion", ""))
+
 
 if __name__ == "__main__":
     unittest.main()
