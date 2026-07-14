@@ -6,6 +6,7 @@ No secret values are ever read or printed — `doctor` checks git-tracking and
 """
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import os
@@ -574,6 +575,70 @@ class Entry:
     summary: str
     path: Path
     klass: str
+    tags: dict = field(default_factory=dict)
+
+
+# --- tags: an optional, backward-compatible frontmatter block -----------------
+# Schema (Ivon's 7 + a stable id): id · date · project · keywords · size ·
+# last_command · github · notion. Parsed dependency-free; absent tags => today's
+# behaviour unchanged.
+_TAG_KEYS = ("id", "date", "project", "keywords", "size", "last_command", "github", "notion")
+_TAG_STOP = {
+    "the", "a", "an", "of", "for", "to", "and", "or", "in", "on", "is", "it", "this",
+    "that", "with", "was", "are", "be", "as", "at", "by", "from", "has", "have", "not",
+    "we", "you", "i", "he", "she", "they", "his", "her", "our", "my", "me", "do", "does",
+    "description", "tags", "http", "https", "com", "www", "md",
+}
+
+
+def parse_tags(text: str) -> dict:
+    """Read an optional `tags:` block from YAML frontmatter — block or inline `{…}` form."""
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return {}
+    tags: dict[str, str] = {}
+    in_block = False
+    for line in lines[1:]:
+        s = line.strip()
+        if s == "---":
+            break
+        if not in_block:
+            if s.lower().startswith("tags:"):
+                rest = s.split(":", 1)[1].strip()
+                if rest.startswith("{"):
+                    return _parse_flow_tags(rest)
+                in_block = True
+            continue
+        # inside the block: indented `key: value` lines until the frontmatter dedents
+        if (line[:1] in (" ", "\t")) and ":" in s:
+            k, v = s.split(":", 1)
+            tags[k.strip()] = v.strip().strip('"').strip("'")
+        else:
+            break
+    return tags
+
+
+def _parse_flow_tags(rest: str) -> dict:
+    """Best-effort parse of an inline `{ id: x, keywords: [a, b], … }` tag mapping."""
+    body = rest.strip().lstrip("{").rstrip("}")
+    tags: dict[str, str] = {}
+    for m in re.finditer(r"(\w+)\s*:\s*(\[[^\]]*\]|\"[^\"]*\"|'[^']*'|[^,}]+)", body):
+        tags[m.group(1).strip()] = m.group(2).strip().strip("[]\"'").strip()
+    return tags
+
+
+def entry_haystack(e: "Entry") -> str:
+    """Lower-cased searchable text: name + class + summary + tag values + full body.
+
+    This is the roaming fix — search now reads the BODY and TAGS, not just the
+    name/summary/class, so recall stops missing.
+    """
+    parts = [e.name, e.klass, e.summary, " ".join(str(v) for v in e.tags.values())]
+    try:
+        parts.append(e.path.read_text(encoding="utf-8", errors="ignore"))
+    except OSError:
+        pass
+    return "\n".join(parts).lower()
 
 
 def _summary(text: str) -> str:
@@ -609,17 +674,17 @@ def library_entries(library: Path) -> list[Entry]:
             text = p.read_text(encoding="utf-8", errors="ignore")
         except OSError:
             continue
-        out.append(Entry(p.name, _summary(text), p, klass))
+        out.append(Entry(p.name, _summary(text), p, klass, parse_tags(text)))
     return out
 
 
 def search_library(library: Path, query: str) -> list[Entry]:
-    """Case-insensitive AND-of-terms match over each entry's name, summary, and class."""
+    """Case-insensitive AND-of-terms match over each entry's name, class, summary, tags, and body."""
     q = query.lower().split()
     entries = library_entries(library)
     if not q:
         return entries
-    return [e for e in entries if all(t in f"{e.name}\n{e.summary}\n{e.klass}".lower() for t in q)]
+    return [e for e in entries if all(t in entry_haystack(e) for t in q)]
 
 
 def read_library_entry(library: Path, name: str) -> Optional[str]:
@@ -628,6 +693,129 @@ def read_library_entry(library: Path, name: str) -> Optional[str]:
         if e.name == name or e.name == f"{name}.md":
             return e.path.read_text(encoding="utf-8", errors="ignore")
     return None
+
+
+# --- tag: backfill the tags block across a library (tooling, never hand-edit) --
+
+
+def short_id(path: Path) -> str:
+    """A stable 6-char base32 handle for an entry, deterministic from its canonical path."""
+    digest = hashlib.sha256(str(path.resolve()).encode("utf-8")).digest()
+    return base64.b32encode(digest).decode("ascii")[:6]
+
+
+def _strip_frontmatter(text: str) -> str:
+    """Return the body after a leading `--- … ---` frontmatter block (or the whole text)."""
+    lines = text.splitlines()
+    if lines and lines[0].strip() == "---":
+        close = next((i for i in range(1, len(lines)) if lines[i].strip() == "---"), None)
+        if close is not None:
+            return "\n".join(lines[close + 1:])
+    return text
+
+
+def _keywords(body: str, stem: str, k: int = 6) -> list[str]:
+    """Extract up to k salient keywords by frequency from the BODY (stopwords/short words dropped)."""
+    words = re.findall(r"[a-zA-Z][a-zA-Z0-9\-]{2,}", f"{stem} {body}".lower())
+    counts: dict[str, int] = {}
+    for w in words:
+        if w in _TAG_STOP or len(w) < 3:
+            continue
+        counts[w] = counts.get(w, 0) + 1
+    ranked = sorted(counts, key=lambda w: (-counts[w], w))
+    return ranked[:k]
+
+
+def build_entry_tags(entry: Entry, text: str) -> dict:
+    """Derive tags for one entry from disk facts + content (no fabricated github/notion).
+
+    id/date/size are written ONCE and preserved thereafter, so re-running `tag` is a
+    no-op (and the id stays a stable handle). Keywords come from the body only.
+    """
+    st = entry.path.stat()
+    existing = entry.tags
+    tags = {
+        "id": existing.get("id") or short_id(entry.path),
+        "date": existing.get("date") or datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d"),
+        "project": artery_key(entry.path.stem),
+        "keywords": ", ".join(_keywords(_strip_frontmatter(text), entry.path.stem)),
+        "size": existing.get("size") or f"{st.st_size / 1024:.1f}kb",
+    }
+    # Carry through any human-supplied fields we can't derive — never invent them.
+    for key in ("last_command", "github", "notion"):
+        if existing.get(key):
+            tags[key] = existing[key]
+    return tags
+
+
+def render_tags_block(tags: dict) -> str:
+    """The block-form frontmatter rendering we write (parsed back by parse_tags)."""
+    lines = ["tags:"]
+    for key in _TAG_KEYS:
+        if key in tags and str(tags[key]).strip():
+            lines.append(f"  {key}: {tags[key]}")
+    return "\n".join(lines)
+
+
+def upsert_tags(text: str, tags: dict) -> str:
+    """Insert or replace the `tags:` block inside frontmatter (idempotent), preserving the rest."""
+    block = render_tags_block(tags)
+    lines = text.splitlines()
+    if lines and lines[0].strip() == "---":
+        # find the closing fence, and strip any existing tags block within
+        close = next((i for i in range(1, len(lines)) if lines[i].strip() == "---"), None)
+        if close is not None:
+            fm = lines[1:close]
+            cleaned: list[str] = []
+            skipping = False
+            for ln in fm:
+                s = ln.strip()
+                if skipping:
+                    if (ln[:1] in (" ", "\t")) and s:
+                        continue  # still inside the old indented tags block
+                    skipping = False
+                if s.lower().startswith("tags:"):
+                    skipping = True
+                    continue
+                cleaned.append(ln)
+            new_fm = cleaned + block.splitlines()
+            return "\n".join(["---", *new_fm, "---", *lines[close + 1:]]) + "\n"
+    # no frontmatter yet — create one carrying just the tags block
+    return "\n".join(["---", block, "---", "", text.rstrip("\n")]) + "\n"
+
+
+@dataclass
+class TagPlan:
+    targets: list[tuple[Path, str]]   # (entry path, new full text)
+    unchanged: int
+
+
+def plan_tag(library: Path) -> TagPlan:
+    """Plan a tag backfill over every library entry; skip entries already correctly tagged."""
+    targets: list[tuple[Path, str]] = []
+    unchanged = 0
+    for e in library_entries(library):
+        try:
+            text = e.path.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        new_text = upsert_tags(text, build_entry_tags(e, text))
+        if new_text != text:
+            targets.append((e.path, new_text))
+        else:
+            unchanged += 1
+    return TagPlan(targets, unchanged)
+
+
+def apply_tag(plan: TagPlan) -> int:
+    """Write the planned tag blocks atomically; returns the number of entries tagged."""
+    done = 0
+    for path, new_text in plan.targets:
+        if path.is_symlink() or not path.is_file():
+            continue
+        _atomic_write(path, new_text)
+        done += 1
+    return done
 
 
 # --- merge: consolidate duplicate-named entries across silos to one canonical -

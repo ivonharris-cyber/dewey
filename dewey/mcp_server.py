@@ -5,9 +5,11 @@ Optional component: `pip install dewey[mcp]`. Point it at a library (the folder
 
     DEWEY_LIBRARY=~/dewey-library dewey-mcp
 
-Exposes search / read / catalogue over the library, plus checkout / checkin so an
-assistant can borrow a shrunk entry back to full content and return it. The core
-logic lives in `core.py` (dependency-free); only this thin wrapper needs `mcp`.
+Exposes search / ask / read / catalogue over the library, plus checkout / checkin
+so an assistant can borrow a shrunk entry back to full content and return it, and
+build_graph to (re)build the Graphify graph that makes `ask` graph-guided. `ask`
+is the ranked, tag- and body-aware recall verb — prefer it over the strict `search`.
+The core logic lives in `core.py` (dependency-free); only this thin wrapper needs `mcp`.
 """
 from __future__ import annotations
 
@@ -16,7 +18,7 @@ from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
 
-from . import core
+from . import core, graph
 
 mcp = FastMCP("dewey")
 
@@ -38,12 +40,33 @@ def _fmt(entries) -> str:
 
 @mcp.tool()
 def search(query: str) -> str:
-    """Search the memory library; returns matching entries, each with a one-line summary."""
+    """Search the memory library (name, class, summary, tags, and body); AND-of-terms."""
     hits = core.search_library(_library(), query)
     if not hits:
         return f"No entries match '{query}'."
     head = f"{len(hits)} entr{'y' if len(hits) == 1 else 'ies'} for '{query}':"
     return head + "\n" + _fmt(hits[:50])
+
+
+@mcp.tool()
+def ask(question: str, limit: int = 8) -> str:
+    """Ask a plain-language question; get the few entries that answer it.
+
+    Graph-guided when a Graphify graph exists (`dewey graph`), otherwise a ranked
+    keyword search over name/class/summary/tags/body. This is sharper than `search`
+    for natural-language questions — prefer it for recall.
+    """
+    res = graph.ask(_library(), question)
+    if not res.entries:
+        return f"[{res.mode}] {res.note}\nNo entries answered '{question}'."
+    return f"[{res.mode}] {res.note}\n" + _fmt(res.entries[:limit])
+
+
+@mcp.tool()
+def build_graph() -> str:
+    """(Re)build the Graphify knowledge graph over the library so `ask` becomes graph-guided."""
+    build = graph.build_graph(_library())
+    return build.message
 
 
 @mcp.tool()

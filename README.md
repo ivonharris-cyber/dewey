@@ -122,12 +122,46 @@ to bytes.
 | `dewey weave --to DIR` | Cluster + colour the library into a Graphify‑style Obsidian graph |
 | `dewey micronise` | Replace shelved silo files with pointers (reversible; never touches `MEMORY.md`) |
 | `dewey checkout` / `checkin` | Restore an entry to full content, then re‑shrink it after edits |
-| `dewey ask` | Ask the library one question; get back only the entries that answer it |
+| `dewey tag --to DIR` | Backfill a `tags` block (id · date · project · keywords · size) into every entry |
+| `dewey ask` | Ask one question; get back only the entries that answer it (tag‑ and body‑aware; `--compress` for token savings) |
 | `dewey health` | Read‑only cross‑drive sweep: the brain checks its own hygiene (duplicates, orphans, superseded, secrets) |
 
 Entries are classified first by type — an established **fact** vs. a **proposal / idea / thought** — then
 by subject in a Dewey `000`–`900` range. When an idea ships, it re‑files from *idea* to *fact*. That split
 is exactly what the cockpit's Facts / Fiction panels render.
+
+### Tags — the roaming fix
+
+Every entry can carry a small, backward‑compatible `tags` block in its frontmatter.
+`dewey tag --to <library>` backfills it across the whole library (dry‑run first, `--apply` to write):
+
+```yaml
+tags:
+  id: PKJNEN            # stable 6‑char handle, deterministic from the path
+  date: 2026-07-14
+  project: onda
+  keywords: onda, booking, stripe, hardening
+  size: 2.1kb
+```
+
+`id`, `date`, and `size` are written **once and preserved** (re‑running `tag` is a no‑op, and the `id`
+stays a stable handle). Fields that can't be derived — `last_command`, `github`, `notion` — are **never
+fabricated**; they're only kept if you add them. Crucially, `search` and `ask` now read the **body and
+tags**, not just the name/summary/class — so recall stops missing.
+
+### SuperCompress — roam small (optional)
+
+`dewey ask --compress` runs the answer context through [SuperCompress](https://gitlab.com/arjunkshah/supercompress)
+(learned KV eviction) and reports how much of the token budget is actually needed:
+
+```
+🧠 SuperCompress [H2O-fallback]: 6323 → 2213 tokens (65% lighter) for the model's context.
+```
+
+It's an **optional** extra, wrapped exactly like Graphify with graceful fallback: `pip install "dewey[compress]"`.
+Out of the box it reports the projected KV/token savings (real numbers, no line‑dropping); train a checkpoint
+once (`supercompress-train --fast`, or point `DEWEY_SUPERCOMPRESS_CHECKPOINT` at a `.pt`) to also trim the
+literal text. Absent the package, `ask` works unchanged. The core stays dependency‑free.
 
 ### Brain health — the whole‑system sweep
 
@@ -160,8 +194,9 @@ pip install dewey[mcp]
 DEWEY_LIBRARY=~/dewey-library dewey-mcp
 ```
 
-Tools: `search`, `read_entry`, `catalogue`, `checkout`, `checkin`. The core stays dependency‑free — only
-the server needs `mcp`.
+Tools: `search`, **`ask`**, `read_entry`, `catalogue`, `checkout`, `checkin`, **`build_graph`**. `ask` is the
+ranked, graph‑guided, tag‑ and body‑aware recall verb — prefer it over the strict‑AND `search`. The core stays
+dependency‑free — only the server needs `mcp`.
 
 ## Install — "Lets go"
 

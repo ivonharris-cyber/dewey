@@ -113,7 +113,7 @@ def _ranked_keyword(library: Path, question: str) -> list[core.Entry]:
         return core.library_entries(library)
     scored: list[tuple[int, core.Entry]] = []
     for e in core.library_entries(library):
-        hay = f"{e.name}\n{e.summary}\n{e.klass}".lower()
+        hay = core.entry_haystack(e)  # name + class + summary + tags + BODY
         score = sum(1 for t in terms if t in hay)
         if score:
             scored.append((score, e))

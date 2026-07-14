@@ -1,6 +1,6 @@
 [project]
 name = "dewey"
-version = "0.10.0"
+version = "0.11.0"
 description = "A Dewey-decimal memory librarian for Claude Code — map, date, and de-duplicate stray .md memory silos."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -11,6 +11,7 @@ dependencies = []
 [project.optional-dependencies]
 mcp = ["mcp>=1.2"]
 vault = ["cryptography>=42"]
+compress = ["supercompress>=0.5"]
 
 [project.scripts]
 dewey = "dewey.cli:main"

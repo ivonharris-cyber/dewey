@@ -2,6 +2,26 @@
 
 All notable changes to Dewey are documented here. This project follows [Semantic Versioning](https://semver.org).
 
+## [0.11.0] — 2026-07-14
+
+### Added
+- **Tags** — an optional, backward-compatible `tags` block in entry frontmatter
+  (`id · date · project · keywords · size · last_command · github · notion`), parsed dependency-free in both
+  block and inline `{…}` form (`core.parse_tags`). New **`dewey tag --to <library>`** backfills it across
+  the library: `id`/`date`/`size` written once and preserved (idempotent; stable 6-char base32 `id` from the
+  path), keywords derived from the body, and `last_command`/`github`/`notion` never fabricated.
+- **`dewey ask --compress`** + new `dewey/compress.py` — optional **SuperCompress** meld (learned KV
+  eviction), wrapped like Graphify with graceful fallback. Reports real projected token savings on the answer
+  context (e.g. 6323 → 2213 tokens, 65% lighter); trims literal text once a checkpoint is trained. Optional
+  extra: `pip install "dewey[compress]"`. Absent the package, `ask` is unchanged.
+- **MCP `ask` + `build_graph` tools** (`mcp_server.py`) — assistants now get the graph-guided, tag- and
+  body-aware recall verb over MCP, not just the strict-AND `search`.
+
+### Changed
+- **Search now reads the body and tags**, not just name/summary/class — `core.search_library` and the
+  `dewey ask` ranked-keyword fallback (`graph._ranked_keyword`) both use the new `core.entry_haystack`. This
+  is the roaming fix: recall stops missing.
+
 ## [0.10.0] — 2026-07-14
 
 ### Added

@@ -6,7 +6,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import __version__, core, graph, brain3d, dashboard, connectors, health
+from . import __version__, core, graph, brain3d, dashboard, connectors, health, compress
 
 def _selected(silos, name, want_all):
     """Yield (silo, file) pairs matching a filename, or every file with --all."""
@@ -289,6 +289,26 @@ def cmd_dashboard(args: argparse.Namespace) -> None:
     print(f"     Serve the folder and open it fullscreen (vendored libs beside it).")
 
 
+def cmd_tag(args: argparse.Namespace) -> None:
+    library = Path(args.to).resolve()
+    if not library.is_dir():
+        print(f"error: {library} is not a library directory (run sync first)")
+        raise SystemExit(2)
+    plan = core.plan_tag(library)
+    print(f"{len(plan.targets)} entr{'y' if len(plan.targets) == 1 else 'ies'} to tag "
+          f"({plan.unchanged} already current).")
+    for path, _ in plan.targets[:20]:
+        print(f"  tag  {core.portable(path)}")
+    if len(plan.targets) > 20:
+        print(f"  ... and {len(plan.targets) - 20} more")
+    if not args.apply:
+        print("\n(dry-run) add --apply to write a tags: block into each entry's frontmatter.")
+        return
+    done = core.apply_tag(plan)
+    print(f"\n[ok] tagged {done} entr{'y' if done == 1 else 'ies'} "
+          "(id · date · project · keywords · size). Re-run search/ask — recall now reads tags + body.")
+
+
 def cmd_ask(args: argparse.Namespace) -> None:
     library = Path(args.to).resolve()
     if not library.is_dir():
@@ -308,6 +328,14 @@ def cmd_ask(args: argparse.Namespace) -> None:
     shown = min(len(res.entries), args.limit)
     print(f"\n{shown} of {len(res.entries)} entr{'y' if len(res.entries) == 1 else 'ies'}. "
           f"Load with:  dewey checkout <name>")
+    if args.compress:
+        bodies = [core.read_library_entry(library, e.name) or "" for e in res.entries[:args.limit]]
+        comp = compress.compress("\n\n".join(b for b in bodies if b), args.question)
+        if comp.ok:
+            print(f"\n🧠 SuperCompress [{comp.policy}]: {comp.original_tokens} → {comp.kept_tokens} "
+                  f"tokens ({comp.saved_pct}% lighter) for the model's context.")
+        else:
+            print(f"\n(compress) {comp.note}")
 
 
 def cmd_connectors(args: argparse.Namespace) -> None:
@@ -532,10 +560,16 @@ def main(argv: list[str] | None = None) -> None:
     graph_p.add_argument("--to", required=True, help="the library directory created by sync")
     graph_p.set_defaults(fn=cmd_graph)
 
+    tag = sub.add_parser("tag", help="backfill a tags block (id·date·project·keywords·size) into every library entry")
+    tag.add_argument("--to", required=True, help="the library directory created by sync")
+    tag.add_argument("--apply", action="store_true", help="write the tags block into each entry (default: dry-run)")
+    tag.set_defaults(fn=cmd_tag)
+
     ask = sub.add_parser("ask", help="find the few entries that answer a question (graph-guided; falls back to keyword)")
     ask.add_argument("question", help="a plain-language question about your memory")
     ask.add_argument("--to", required=True, help="the library directory created by sync")
     ask.add_argument("--limit", type=int, default=8, help="max entries to show (default 8)")
+    ask.add_argument("--compress", action="store_true", help="report SuperCompress token savings on the answer context (optional tool)")
     ask.set_defaults(fn=cmd_ask)
 
     con = sub.add_parser("connectors", help="the cockpit connectors/keys hub: subscriptions, BCP, MCP, vault")
