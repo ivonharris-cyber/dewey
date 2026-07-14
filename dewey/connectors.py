@@ -446,6 +446,27 @@ def activity_feed(today: Optional[date] = None, days: int = 30) -> dict:
 
 
 # ── panel state (no values, ever) ───────────────────────────────────────────
+def stats_block() -> dict:
+    """Live cockpit stat tiles from MEASURED transcripts — mirrors the cockpit's
+    BOND.stats keys so it can refresh them at runtime (no post-publish re-patch).
+    Defensive: returns {} on any failure so stats can never kill the dash feed."""
+    try:
+        m = _load_stats()
+        if not m:
+            return {}
+        daily = m.get("dailyActivity", []) or []
+        usage = m.get("modelUsage", {}) or {}
+        return {
+            "daysActive": len(daily),
+            "sessions": m.get("totalSessions", 0),
+            "messages": m.get("totalMessages", 0),
+            "toolCalls": sum(d.get("toolCallCount", 0) for d in daily),
+            "tokensOut": sum(v.get("outputTokens", 0) for v in usage.values()),
+        }
+    except Exception:  # noqa: BLE001 — stats must never break the cockpit feed
+        return {}
+
+
 def state(manifest=None) -> dict:
     manifest = manifest or load_manifest()
     ks = key_status(manifest)
@@ -464,4 +485,5 @@ def state(manifest=None) -> dict:
         "vault": {"available": vault_available(), "exists": vault_exists()},
         "fuel": fuel_panel(),
         "activity": activity_feed(),
+        "stats": stats_block(),
     }
