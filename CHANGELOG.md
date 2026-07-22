@@ -2,6 +2,31 @@
 
 All notable changes to Dewey are documented here. This project follows [Semantic Versioning](https://semver.org).
 
+## [0.16.0] — 2026-07-23
+
+The **Leeloo upgrade, Cycle 3** — intake skills: capture research, PDFs, and images into recallable memory.
+
+### Added
+- **`dewey research "<q>"` — capture Perplexity research into the library.** Queries Perplexity
+  (stdlib `urllib`; key from `PERPLEXITY_API_KEY`, never hardcoded/logged) and shelves the answer
+  + citations as a dated `500-reference/research/` card, recallable via `dewey ask`. No extra needed.
+- **`dewey ocr <pdf|image>` — read a document to plain text and shelve it.** Text-layer PDFs via
+  `pypdf`; images via Tesseract OCR (auto-detects the Windows UB-Mannheim binary). Lands a
+  `500-reference/ocr/` card. Optional extra: `pip install "dewey[ocr]"`.
+- **`dewey image <img>` — keep a lightweight recollection stub.** Records dimensions, format,
+  palette, and an optional caption in `500-reference/images/`; the pixels stay on disk. Optional
+  extra: `pip install "dewey[image]"`.
+- Three `SKILL.md`s (`skills/dewey-research`, `skills/dewey-ocr`, `skills/dewey-image`) so an
+  assistant knows when to reach for each.
+- New optional extras `ocr` and `image`; each module follows the graceful-fallback pattern
+  (`available()` + a clear `.note` when a backend is missing) — core stays stdlib-only.
+- 12 new tests (`tests/test_research.py`, `test_ocr.py`, `test_image.py`): key-absent /
+  backend-absent graceful paths plus real OCR + Pillow round-trips (skipped when the binary isn't
+  present). Suite: **106 green**.
+
+_Deferred (noted for a later cycle): `dewey-recall` (the self-reflect reflex as a verb) and
+`dewey-forget` (the Forgotten-Dreams archivist)._
+
 ## [0.15.0] — 2026-07-23
 
 The **Leeloo upgrade, Cycle 2** — the mantra, made automatic.

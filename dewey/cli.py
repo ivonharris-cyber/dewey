@@ -6,7 +6,9 @@ import json
 import sys
 from pathlib import Path
 
-from . import __version__, core, graph, brain3d, dashboard, connectors, health, compress, state, brief as brief_mod, autostub as autostub_mod
+from . import (__version__, core, graph, brain3d, dashboard, connectors, health, compress, state,
+               brief as brief_mod, autostub as autostub_mod,
+               research as research_mod, ocr as ocr_mod, image_stub as image_mod)
 
 def _selected(silos, name, want_all):
     """Yield (silo, file) pairs matching a filename, or every file with --all."""
@@ -438,6 +440,48 @@ def cmd_ask(args: argparse.Namespace) -> None:
             print(f"\n(compress) {comp.note}")
 
 
+def cmd_research(args: argparse.Namespace) -> None:
+    library = Path(args.to).resolve()
+    if not library.is_dir():
+        print(f"error: {library} is not a library directory (run sync first)")
+        raise SystemExit(2)
+    res = research_mod.capture(library, args.question, model=args.model)
+    if not res.ok:
+        print(f"(research) {res.note}")
+        raise SystemExit(1)
+    print(f"[ok] research captured: {core.portable(res.path)}  ({len(res.citations)} citation(s))")
+    print(f"     recall it later:  dewey ask \"{args.question[:40]}\" --to <library>")
+    if args.show:
+        print("\n" + res.content[:1500] + ("…" if len(res.content) > 1500 else ""))
+
+
+def cmd_ocr(args: argparse.Namespace) -> None:
+    library = Path(args.to).resolve()
+    if not library.is_dir():
+        print(f"error: {library} is not a library directory (run sync first)")
+        raise SystemExit(2)
+    res = ocr_mod.capture(library, Path(args.file))
+    if not res.ok:
+        print(f"(ocr) {res.note}")
+        raise SystemExit(1)
+    print(f"[ok] ocr [{res.method}] -> {core.portable(res.path)}  ({len(res.text)} chars)")
+
+
+def cmd_image(args: argparse.Namespace) -> None:
+    library = Path(args.to).resolve()
+    if not library.is_dir():
+        print(f"error: {library} is not a library directory (run sync first)")
+        raise SystemExit(2)
+    res = image_mod.capture(library, Path(args.file), caption=args.caption)
+    if not res.ok:
+        print(f"(image) {res.note}")
+        raise SystemExit(1)
+    m = res.meta
+    print(f"[ok] image stub -> {core.portable(res.path)}")
+    if "width" in m:
+        print(f"     {m.get('format')} {m['width']}x{m['height']}  palette {m.get('palette')}")
+
+
 def cmd_connectors(args: argparse.Namespace) -> None:
     op = args.op
     if op == "state":
@@ -703,6 +747,25 @@ def main(argv: list[str] | None = None) -> None:
     ask.add_argument("--limit", type=int, default=8, help="max entries to show (default 8)")
     ask.add_argument("--compress", action="store_true", help="report SuperCompress token savings on the answer context (optional tool)")
     ask.set_defaults(fn=cmd_ask)
+
+    research_p = sub.add_parser("research", help="ask Perplexity and shelve the answer as a recallable library card")
+    research_p.add_argument("question", help="the research question")
+    research_p.add_argument("--to", required=True, help="the library directory created by sync")
+    research_p.add_argument("--model", default=research_mod.DEFAULT_MODEL,
+                            help=f"Perplexity model (default {research_mod.DEFAULT_MODEL})")
+    research_p.add_argument("--show", action="store_true", help="also print the answer to the console")
+    research_p.set_defaults(fn=cmd_research)
+
+    ocr_p = sub.add_parser("ocr", help="read a PDF/image to plain text and shelve it as a recallable card")
+    ocr_p.add_argument("file", help="a .pdf or image file to read")
+    ocr_p.add_argument("--to", required=True, help="the library directory created by sync")
+    ocr_p.set_defaults(fn=cmd_ocr)
+
+    image_p = sub.add_parser("image", help="keep a lightweight recollection stub of an image (pixels stay on disk)")
+    image_p.add_argument("file", help="an image file to stub")
+    image_p.add_argument("--to", required=True, help="the library directory created by sync")
+    image_p.add_argument("--caption", help="an optional human caption to store with the stub")
+    image_p.set_defaults(fn=cmd_image)
 
     con = sub.add_parser("connectors", help="the cockpit connectors/keys hub: subscriptions, BCP, MCP, vault")
     con.add_argument("op", choices=["state", "list", "keys", "spend", "setcost", "bcp", "mcp", "vault", "key", "tokens", "budget"])
