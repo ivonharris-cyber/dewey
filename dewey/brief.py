@@ -75,22 +75,38 @@ def _date_ordinal(date_str: str) -> int:
 
 
 def _sort_key(e: core.Entry):
-    """Rank by class importance first, then recency. Deterministic."""
-    return (_class_weight(e.klass), _date_ordinal(e.tags.get("date", "")), e.name)
+    """Rank by class importance, then recency, then name ASCENDING. Deterministic.
+
+    (Negating the numeric keys lets name break ties alphabetically-first without a
+    global reverse=True, so `hapai.md` sorts before `whakapai.md` at equal rank.)
+    """
+    return (-_class_weight(e.klass), -_date_ordinal(e.tags.get("date", "")), e.name)
+
+
+def _is_stub(e: core.Entry) -> bool:
+    """Authoritative empty-pointer check — reads only the first line, and covers
+    BOTH micronise and balance stubs (they share core._STUB_MARKER). The cheap
+    summary prefix filter in rank_pointers catches most; this is the backstop."""
+    try:
+        with e.path.open(encoding="utf-8", errors="ignore") as fh:
+            return fh.readline().startswith(core._STUB_MARKER)
+    except OSError:
+        return False
 
 
 def rank_pointers(entries: list[core.Entry]) -> list[core.Entry]:
     """The candidate cards for the brief, most-relevant first.
 
     Skips root hubs/indexes and micronised (empty) pointer entries — both are
-    signposts, not answers.
+    signposts, not answers. (Balance stubs, whose summary differs, are caught by
+    the _is_stub backstop during selection.)
     """
     cards = [
         e for e in entries
         if e.name.lower() not in _BRIEF_SKIP
         and not (e.summary or "").strip().lower().startswith(_STUB_SUMMARY)
     ]
-    return sorted(cards, key=_sort_key, reverse=True)
+    return sorted(cards, key=_sort_key)
 
 
 def _est_tokens(text: str) -> int:
@@ -125,6 +141,8 @@ def _select(ranked: list[core.Entry], max_pointers: int, per_class_cap: int) -> 
         cls = (e.klass or "")[:3]
         if per_class.get(cls, 0) >= per_class_cap:
             continue
+        if _is_stub(e):
+            continue  # backstop: never spend a slot on an empty pointer (micronise/balance)
         picked.append(e)
         per_class[cls] = per_class.get(cls, 0) + 1
         if len(picked) >= max_pointers:
@@ -151,6 +169,8 @@ def build_brief(library: Path, *, max_pointers: int = DEFAULT_MAX_POINTERS,
     shown = 0
     for e in candidates:
         candidate = "\n".join(lines + [_pointer_line(e)])
+        # The footer here approximates the real one (which carries shown counts); the
+        # ~6-token slack is intentional and covered by the token-cap test's tolerance.
         if _est_tokens(candidate + f"\n\n(… {total} total)  mantra: {MANTRA}") > token_cap:
             break
         lines.append(_pointer_line(e))

@@ -66,6 +66,17 @@ class BriefFiltersAndCaps(unittest.TestCase):
         self.assertIn("reference_real.md", text)
         self.assertNotIn("reference_empty.md", text)
 
+    def test_balance_stub_caught_by_marker_backstop(self) -> None:
+        # A balance stub's summary differs from a micronise stub's, so the cheap
+        # summary filter misses it — the _STUB_MARKER backstop must catch it.
+        _write(self.lib / "500-reference" / "r" / "reference_real2.md", "A real body\n")
+        _write(self.lib / "500-reference" / "r" / "balance_dupe.md",
+               "# moved by `dewey balance`\n# dewey-canonical: ~/x\n\n"
+               "This was an exact duplicate. The canonical copy is at:\n\n`~/x`\n")
+        text = brief.brief(self.lib)
+        self.assertIn("reference_real2.md", text)
+        self.assertNotIn("balance_dupe.md", text)
+
     def test_per_class_cap_keeps_the_brief_diverse(self) -> None:
         for i in range(6):
             _write(self.lib / "500-reference" / "r" / f"reference_{i}.md", f"ref body {i}\n")
