@@ -2,6 +2,27 @@
 
 All notable changes to Dewey are documented here. This project follows [Semantic Versioning](https://semver.org).
 
+## [0.15.0] — 2026-07-23
+
+The **Leeloo upgrade, Cycle 2** — the mantra, made automatic.
+
+### Added
+- **`dewey autostub` — auto-shrink grown memory to pointers past a token threshold.** The
+  *write* half of the Leeloo loop: a silo file that grew during a session collapses back to a
+  Dewey-decimal pointer on its own, once its content is already byte-identical in the library.
+  Reuses the micronise engine wholesale (`plan_micronise` / `apply_micronise` /
+  `write_micronise_log`) — same pointer format, atomic writes, recovery log, `~/.claude`
+  boundary + symlink guards, and `MEMORY.md` protection — adding only a size gate
+  (`--min-tokens`, default 2000). Dry-run by default; `--apply` to collapse. A file that grew
+  but was never synced is left untouched (safe) — `dewey sync --apply` shelves it first.
+- **`docs/MANTRA.md`** — the embedded mantra ("recall before you act; make memory smaller, not
+  heavier; never lose anything") tying `brief` / `autostub` / `checkout` / `self-reflect` into
+  one loop.
+- **`hooks/dewey-autostub-stop.sh`** — an opt-in Stop hook that syncs then autostubs at session
+  end; time-boxed, logged, never blocks Stop.
+- 6 new tests (`tests/test_autostub.py`): over/under threshold, unsynced files untouched,
+  live-index protected, dry-run writes nothing, checkout round-trip. Suite: **93 green**.
+
 ## [0.14.0] — 2026-07-23
 
 The **Leeloo upgrade, Cycle 1** — Dewey now opens every session ready-to-go instead of cold.

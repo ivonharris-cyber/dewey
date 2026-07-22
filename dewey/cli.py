@@ -6,7 +6,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import __version__, core, graph, brain3d, dashboard, connectors, health, compress, state, brief as brief_mod
+from . import __version__, core, graph, brain3d, dashboard, connectors, health, compress, state, brief as brief_mod, autostub as autostub_mod
 
 def _selected(silos, name, want_all):
     """Yield (silo, file) pairs matching a filename, or every file with --all."""
@@ -154,6 +154,32 @@ def cmd_micronise(args: argparse.Namespace) -> None:
     print("NOTE: those silo files are now pointer stubs — your assistant reads the pointer, not the")
     print("      content, until a checkout/restore command exists. Re-run `dewey sync` to rebuild the")
     print("      library, or restore originals from the recovery log if needed.")
+
+
+def cmd_autostub(args: argparse.Namespace) -> None:
+    library = Path(args.library).resolve()
+    if not library.is_dir():
+        print(f"error: {library} is not a library directory (run sync first)")
+        raise SystemExit(2)
+    ap = autostub_mod.plan_autostub(core.discover_silos(), library, min_tokens=args.min_tokens)
+    plan = ap.plan
+    if not plan.targets:
+        print(f"nothing to autostub — no synced silo file is at/over {ap.min_tokens} tokens "
+              f"({ap.skipped_small} smaller shelved file(s) left in place).")
+        print("If this session added content, run `dewey sync --apply` first to shelve it, then retry.")
+        return
+    saved = plan.before_bytes - plan.after_bytes
+    pct = saved / plan.before_bytes * 100 if plan.before_bytes else 0
+    print(f"{len(plan.targets)} grown file(s) at/over {ap.min_tokens} tok can shrink to pointers "
+          f"({ap.skipped_small} smaller left alone):")
+    print(f"  before: {plan.before_bytes/1024:.0f} KB  ->  after: {plan.after_bytes/1024:.1f} KB   ({pct:.0f}% smaller)")
+    if not args.apply:
+        print("\n(dry-run) add --apply to replace those grown silo files with pointers "
+              "(full content stays in the library; recovery log written).")
+        return
+    log = core.write_micronise_log(plan)
+    done = core.apply_micronise(plan)
+    print(f"\n[ok] autostubbed {done} file(s) — grown memory returned to pointers. recovery log: {core.portable(log)}")
 
 
 def cmd_checkout(args: argparse.Namespace) -> None:
@@ -592,6 +618,13 @@ def main(argv: list[str] | None = None) -> None:
     micronise.add_argument("--library", required=True, help="the library directory created by sync")
     micronise.add_argument("--apply", action="store_true", help="replace shelved silo files with pointers (re-verified; recovery log written)")
     micronise.set_defaults(fn=cmd_micronise)
+
+    autostub = sub.add_parser("autostub", help="the mantra, automatic: shrink grown, already-synced silo files to pointers past a token threshold (dry-run by default)")
+    autostub.add_argument("--library", required=True, help="the library directory created by sync")
+    autostub.add_argument("--min-tokens", type=int, default=autostub_mod.DEFAULT_MIN_TOKENS, dest="min_tokens",
+                          help=f"only shrink files at/over this many tokens (default {autostub_mod.DEFAULT_MIN_TOKENS})")
+    autostub.add_argument("--apply", action="store_true", help="replace grown silo files with pointers (re-verified; recovery log written)")
+    autostub.set_defaults(fn=cmd_autostub)
 
     checkout = sub.add_parser("checkout", help="restore a shrunk entry to full content (so the assistant can read it)")
     checkout.add_argument("name", nargs="?", help="entry filename, e.g. project_foo.md (omit with --all)")
