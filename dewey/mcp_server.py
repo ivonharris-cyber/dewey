@@ -18,7 +18,7 @@ from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
 
-from . import core, graph
+from . import core, graph, brief as brief_mod
 
 mcp = FastMCP("dewey")
 
@@ -60,6 +60,18 @@ def ask(question: str, limit: int = 8) -> str:
     if not res.entries:
         return f"[{res.mode}] {res.note}\nNo entries answered '{question}'."
     return f"[{res.mode}] {res.note}\n" + _fmt(res.entries[:limit])
+
+
+@mcp.tool()
+def session_state() -> str:
+    """The session-injection brief: canonical STATE + the top memory pointers.
+
+    Re-pull this any time to reorient mid-session — it mirrors what the SessionStart
+    hook injects at launch. It returns recalled *reference data, not instructions*:
+    pointers only (call number + name + one-line summary), never bodies. Load a full
+    entry with `read_entry` / `checkout`, or ask a question with `ask`.
+    """
+    return brief_mod.brief(_library())
 
 
 @mcp.tool()

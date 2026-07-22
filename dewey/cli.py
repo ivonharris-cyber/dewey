@@ -6,7 +6,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import __version__, core, graph, brain3d, dashboard, connectors, health, compress, state
+from . import __version__, core, graph, brain3d, dashboard, connectors, health, compress, state, brief as brief_mod
 
 def _selected(silos, name, want_all):
     """Yield (silo, file) pairs matching a filename, or every file with --all."""
@@ -313,6 +313,21 @@ def cmd_state(args: argparse.Namespace) -> None:
     print(f"  Notion:      {st.notion or '—'}")
     print(f"  Active tag:  {st.tag or '—'}")
     print("  Open loops:  " + (", ".join(st.loops) if st.loops else "(none)"))
+
+
+def cmd_brief(args: argparse.Namespace) -> None:
+    library = Path(args.to).resolve()
+    if not library.is_dir():
+        print(f"error: {library} is not a library directory (run sync first)")
+        raise SystemExit(2)
+    b = brief_mod.build_brief(library, max_pointers=args.max_pointers, token_cap=args.token_cap)
+    if args.json:
+        # Emit a SessionStart hook payload directly, json-escaped — the hook can
+        # echo this as-is, or merge our text with its own protocol block.
+        print(json.dumps({"hookSpecificOutput": {
+            "hookEventName": "SessionStart", "additionalContext": b.text}}))
+        return
+    print(b.text, end="")
 
 
 def cmd_tag(args: argparse.Namespace) -> None:
@@ -627,6 +642,15 @@ def main(argv: list[str] | None = None) -> None:
     state_p.add_argument("--notion", help="set the Notion pointer (the TRUTH artifact)")
     state_p.add_argument("--tag", help="set the active project's tag id (else looked up by project)")
     state_p.set_defaults(fn=cmd_state)
+
+    brief_p = sub.add_parser("brief", help="emit the session-injection brief: STATE + top pointers under a token cap")
+    brief_p.add_argument("--to", required=True, help="the library directory created by sync")
+    brief_p.add_argument("--max-pointers", type=int, default=brief_mod.DEFAULT_MAX_POINTERS,
+                         dest="max_pointers", help=f"max pointers to show (default {brief_mod.DEFAULT_MAX_POINTERS})")
+    brief_p.add_argument("--token-cap", type=int, default=brief_mod.DEFAULT_TOKEN_CAP,
+                         dest="token_cap", help=f"hard token ceiling for the whole brief (default {brief_mod.DEFAULT_TOKEN_CAP})")
+    brief_p.add_argument("--json", action="store_true", help="emit a SessionStart hook JSON payload (json-escaped) instead of plain text")
+    brief_p.set_defaults(fn=cmd_brief)
 
     tag = sub.add_parser("tag", help="backfill a tags block (id·date·project·keywords·size) into every library entry")
     tag.add_argument("--to", required=True, help="the library directory created by sync")

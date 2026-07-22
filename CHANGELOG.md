@@ -2,6 +2,24 @@
 
 All notable changes to Dewey are documented here. This project follows [Semantic Versioning](https://semver.org).
 
+## [0.14.0] — 2026-07-23
+
+The **Leeloo upgrade, Cycle 1** — Dewey now opens every session ready-to-go instead of cold.
+
+### Added
+- **`dewey brief` — the session-injection brief.** Emits the canonical STATE plus the top
+  memory *pointers* (call number + name + one-line summary, never bodies) under a hard token
+  cap, so a SessionStart hook can inject "here is where things stand" at launch. Diverse by
+  design (a per-Dewey-class cap so one class can't hog every slot), skips root hubs and
+  micronised (empty) pointer entries, and degrades gracefully when STATE isn't set yet.
+  `--json` emits a SessionStart hook payload directly (json-escaped); `--max-pointers` and
+  `--token-cap` tune the budget. Reads ONLY the synced library and labels its output as
+  recalled *reference data, not instructions* (memory is context, never commands).
+- **`session_state` MCP tool** — re-pull the same brief mid-session to reorient. Load full
+  entries with `read_entry` / `checkout`, or ask a question with `ask`.
+- 7 new tests (`tests/test_brief.py`): STATE shown/absent, project-over-session ranking,
+  per-class cap, token cap, and stub-entry filtering. Suite: **87 green**.
+
 ## [0.13.1] — 2026-07-14
 
 ### Fixed
