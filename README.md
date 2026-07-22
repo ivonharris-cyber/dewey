@@ -121,11 +121,16 @@ to bytes.
 | `dewey sync --to DIR` | Copy memory into a browsable, classified Markdown library |
 | `dewey weave --to DIR` | Cluster + colour the library into a Graphify‑style Obsidian graph |
 | `dewey micronise` | Replace shelved silo files with pointers (reversible; never touches `MEMORY.md`) |
+| `dewey autostub --library DIR` | **The mantra, automatic:** shrink grown, already‑synced silo files to pointers past a token threshold (dry‑run default). Wire into a Stop hook and memory returns to pointers on its own |
 | `dewey checkout` / `checkin` | Restore an entry to full content, then re‑shrink it after edits |
 | `dewey state --to DIR` | Read/write the canonical STATE entry — one truth, read first every session |
+| `dewey brief --to DIR` | Emit the **session‑injection brief** — STATE + the top pointers under a token cap. A SessionStart hook injects it so every session opens ready‑to‑go, not cold (`--json` for the hook payload) |
 | `dewey tag --to DIR` | Catalogue every card with a real Dewey **call number** (`400.68 PROT`) from an accession register |
 | `dewey call NUMBER --to DIR` | **Withdraw** a card by its call number (`400.68`), or list a shelf (`400`); `--compress` squeezes it |
 | `dewey ask` | Ask one question; get back only the entries that answer it (tag‑ and body‑aware; `--compress` for token savings) |
+| `dewey research "<q>" --to DIR` | Ask **Perplexity** and shelve the answer + citations as a recallable card (`PERPLEXITY_API_KEY`; stdlib, no extra) |
+| `dewey ocr <pdf\|image> --to DIR` | Read a PDF (text layer) or image (**Tesseract OCR**) to plain text and shelve it (`dewey[ocr]`) |
+| `dewey image <img> --to DIR` | Keep a lightweight **recollection stub** (dimensions/format/palette/caption); the pixels stay on disk (`dewey[image]`) |
 | `dewey health` | Read‑only cross‑drive sweep: the brain checks its own hygiene (duplicates, orphans, superseded, secrets) |
 
 Entries are classified first by type — an established **fact** vs. a **proposal / idea / thought** — then
