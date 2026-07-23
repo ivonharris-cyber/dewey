@@ -2,6 +2,26 @@
 
 All notable changes to Dewey are documented here. This project follows [Semantic Versioning](https://semver.org).
 
+## [0.16.2] — 2026-07-23
+
+Slash-command wrappers — one-keystroke recall and wrap-up in Claude Code, plus live
+verification of the 0.16.1 injection fix.
+
+### Added
+- **`commands/` — three Claude Code slash-command wrappers over the MCP verbs**, installed
+  by copying into `~/.claude/commands/`:
+  - `/recall <topic>` — `ask`-first recall, `read_entry` the few hits that answer,
+    `checkout` only what future sessions need; never invents memory.
+  - `/checkin [entry]` — end-of-session wrap-up: `checkin` touched entries, shelve new
+    learnings via the canonical library + `00-INDEX`, secrets masked, honest report.
+  - `/brief` — re-pull `session_state` mid-session; flags STATE drift.
+  These deliver the deferred `dewey-recall` idea at the harness layer (no core changes;
+  README documents them under Reference Desk).
+
+### Verified
+- 0.16.1 SessionStart injection confirmed live in a fresh session: protocol + CURRENT TIME
+  + full brief all fired (1,442 pointers indexed at time of check).
+
 ## [0.16.1] — 2026-07-23
 
 Hardening of the Cycle-1 SessionStart injection — it was silently degrading to

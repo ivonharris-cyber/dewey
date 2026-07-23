@@ -220,6 +220,17 @@ Tools: `search`, **`ask`**, `read_entry`, `catalogue`, `checkout`, `checkin`, **
 ranked, graph‑guided, tag‑ and body‑aware recall verb — prefer it over the strict‑AND `search`. The core stays
 dependency‑free — only the server needs `mcp`.
 
+### Slash commands (Claude Code)
+
+Three thin wrappers over the MCP verbs, so recall and wrap‑up are one keystroke instead of a prose ask.
+Copies live in [`commands/`](commands/); install by dropping them into `~/.claude/commands/`:
+
+| Command | What it does |
+|---|---|
+| `/recall <topic or question>` | `ask`‑first recall (falls back to strict‑AND `search` for bare keywords), `read_entry` on the few hits that answer, `checkout` only what future sessions will need. Never invents memory. |
+| `/checkin [entry or learning]` | End‑of‑session wrap‑up: `checkin` every entry touched this session, shelve new learnings in the canonical library (routed through `00-INDEX`, secrets masked), report what was — and wasn't — saved. |
+| `/brief` | Re‑pull `session_state` mid‑session — STATE + open loops + the pointers relevant right now, and flag drift against what happened this session. |
+
 ## Install — "Lets go"
 
 007‑Bond is designed to onboard *you*, not the other way around. Two paths:

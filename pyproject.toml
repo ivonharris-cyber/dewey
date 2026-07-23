@@ -1,6 +1,6 @@
 [project]
 name = "dewey"
-version = "0.16.1"
+version = "0.16.2"
 description = "A Dewey-decimal memory librarian for Claude Code — map, date, and de-duplicate stray .md memory silos."
 readme = "README.md"
 requires-python = ">=3.9"
