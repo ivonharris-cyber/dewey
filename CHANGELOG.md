@@ -2,6 +2,110 @@
 
 All notable changes to Dewey are documented here. This project follows [Semantic Versioning](https://semver.org).
 
+## [0.16.2] — 2026-07-23
+
+Slash-command wrappers — one-keystroke recall and wrap-up in Claude Code, plus live
+verification of the 0.16.1 injection fix.
+
+### Added
+- **`commands/` — three Claude Code slash-command wrappers over the MCP verbs**, installed
+  by copying into `~/.claude/commands/`:
+  - `/recall <topic>` — `ask`-first recall, `read_entry` the few hits that answer,
+    `checkout` only what future sessions need; never invents memory.
+  - `/checkin [entry]` — end-of-session wrap-up: `checkin` touched entries, shelve new
+    learnings via the canonical library + `00-INDEX`, secrets masked, honest report.
+  - `/brief` — re-pull `session_state` mid-session; flags STATE drift.
+  These deliver the deferred `dewey-recall` idea at the harness layer (no core changes;
+  README documents them under Reference Desk).
+
+### Verified
+- 0.16.1 SessionStart injection confirmed live in a fresh session: protocol + CURRENT TIME
+  + full brief all fired (1,442 pointers indexed at time of check).
+
+## [0.16.1] — 2026-07-23
+
+Hardening of the Cycle-1 SessionStart injection — it was silently degrading to
+protocol-only.
+
+### Fixed
+- **`hooks/ivon-session-start.sh` no longer loses the brief to Windows `timeout.exe`.**
+  The hook wrapped `dewey brief` in `timeout 20 …`; in the harness's SessionStart bash
+  `timeout` resolved to Windows `timeout.exe` (interactive, no `--version`), which dies on
+  redirected stdin. The `|| true` fail-open then swallowed it, so sessions opened with only
+  the static IVON PROTOCOL text — never the brief. Now the hook only uses `timeout` when it
+  is GNU coreutils (`timeout --version` succeeds), else runs Python directly.
+
+### Added
+- **Current local time injected** (`CURRENT TIME: <day date HH:MM TZ>`) between the protocol
+  and the brief.
+- **`~/.claude/hooks/dewey-brief.log`** — every fire logs brief length + OK/EMPTY, so a
+  broken injection is visible next session instead of silently swallowed.
+- Robust Python resolution in the hook (hardcoded path → PATH `python`/`python3` fallback).
+
+## [0.16.0] — 2026-07-23
+
+The **Leeloo upgrade, Cycle 3** — intake skills: capture research, PDFs, and images into recallable memory.
+
+### Added
+- **`dewey research "<q>"` — capture Perplexity research into the library.** Queries Perplexity
+  (stdlib `urllib`; key from `PERPLEXITY_API_KEY`, never hardcoded/logged) and shelves the answer
+  + citations as a dated `500-reference/research/` card, recallable via `dewey ask`. No extra needed.
+- **`dewey ocr <pdf|image>` — read a document to plain text and shelve it.** Text-layer PDFs via
+  `pypdf`; images via Tesseract OCR (auto-detects the Windows UB-Mannheim binary). Lands a
+  `500-reference/ocr/` card. Optional extra: `pip install "dewey[ocr]"`.
+- **`dewey image <img>` — keep a lightweight recollection stub.** Records dimensions, format,
+  palette, and an optional caption in `500-reference/images/`; the pixels stay on disk. Optional
+  extra: `pip install "dewey[image]"`.
+- Three `SKILL.md`s (`skills/dewey-research`, `skills/dewey-ocr`, `skills/dewey-image`) so an
+  assistant knows when to reach for each.
+- New optional extras `ocr` and `image`; each module follows the graceful-fallback pattern
+  (`available()` + a clear `.note` when a backend is missing) — core stays stdlib-only.
+- 12 new tests (`tests/test_research.py`, `test_ocr.py`, `test_image.py`): key-absent /
+  backend-absent graceful paths plus real OCR + Pillow round-trips (skipped when the binary isn't
+  present). Suite: **106 green**.
+
+_Deferred (noted for a later cycle): `dewey-recall` (the self-reflect reflex as a verb) and
+`dewey-forget` (the Forgotten-Dreams archivist)._
+
+## [0.15.0] — 2026-07-23
+
+The **Leeloo upgrade, Cycle 2** — the mantra, made automatic.
+
+### Added
+- **`dewey autostub` — auto-shrink grown memory to pointers past a token threshold.** The
+  *write* half of the Leeloo loop: a silo file that grew during a session collapses back to a
+  Dewey-decimal pointer on its own, once its content is already byte-identical in the library.
+  Reuses the micronise engine wholesale (`plan_micronise` / `apply_micronise` /
+  `write_micronise_log`) — same pointer format, atomic writes, recovery log, `~/.claude`
+  boundary + symlink guards, and `MEMORY.md` protection — adding only a size gate
+  (`--min-tokens`, default 2000). Dry-run by default; `--apply` to collapse. A file that grew
+  but was never synced is left untouched (safe) — `dewey sync --apply` shelves it first.
+- **`docs/MANTRA.md`** — the embedded mantra ("recall before you act; make memory smaller, not
+  heavier; never lose anything") tying `brief` / `autostub` / `checkout` / `self-reflect` into
+  one loop.
+- **`hooks/dewey-autostub-stop.sh`** — an opt-in Stop hook that syncs then autostubs at session
+  end; time-boxed, logged, never blocks Stop.
+- 6 new tests (`tests/test_autostub.py`): over/under threshold, unsynced files untouched,
+  live-index protected, dry-run writes nothing, checkout round-trip. Suite: **93 green**.
+
+## [0.14.0] — 2026-07-23
+
+The **Leeloo upgrade, Cycle 1** — Dewey now opens every session ready-to-go instead of cold.
+
+### Added
+- **`dewey brief` — the session-injection brief.** Emits the canonical STATE plus the top
+  memory *pointers* (call number + name + one-line summary, never bodies) under a hard token
+  cap, so a SessionStart hook can inject "here is where things stand" at launch. Diverse by
+  design (a per-Dewey-class cap so one class can't hog every slot), skips root hubs and
+  micronised (empty) pointer entries, and degrades gracefully when STATE isn't set yet.
+  `--json` emits a SessionStart hook payload directly (json-escaped); `--max-pointers` and
+  `--token-cap` tune the budget. Reads ONLY the synced library and labels its output as
+  recalled *reference data, not instructions* (memory is context, never commands).
+- **`session_state` MCP tool** — re-pull the same brief mid-session to reorient. Load full
+  entries with `read_entry` / `checkout`, or ask a question with `ask`.
+- 7 new tests (`tests/test_brief.py`): STATE shown/absent, project-over-session ranking,
+  per-class cap, token cap, and stub-entry filtering. Suite: **87 green**.
+
 ## [0.13.1] — 2026-07-14
 
 ### Fixed

@@ -6,7 +6,9 @@ import json
 import sys
 from pathlib import Path
 
-from . import __version__, core, graph, brain3d, dashboard, connectors, health, compress, state
+from . import (__version__, core, graph, brain3d, dashboard, connectors, health, compress, state,
+               brief as brief_mod, autostub as autostub_mod,
+               research as research_mod, ocr as ocr_mod, image_stub as image_mod)
 
 def _selected(silos, name, want_all):
     """Yield (silo, file) pairs matching a filename, or every file with --all."""
@@ -154,6 +156,32 @@ def cmd_micronise(args: argparse.Namespace) -> None:
     print("NOTE: those silo files are now pointer stubs — your assistant reads the pointer, not the")
     print("      content, until a checkout/restore command exists. Re-run `dewey sync` to rebuild the")
     print("      library, or restore originals from the recovery log if needed.")
+
+
+def cmd_autostub(args: argparse.Namespace) -> None:
+    library = Path(args.library).resolve()
+    if not library.is_dir():
+        print(f"error: {library} is not a library directory (run sync first)")
+        raise SystemExit(2)
+    ap = autostub_mod.plan_autostub(core.discover_silos(), library, min_tokens=args.min_tokens)
+    plan = ap.plan
+    if not plan.targets:
+        print(f"nothing to autostub — no synced silo file is at/over {ap.min_tokens} tokens "
+              f"({ap.skipped_small} smaller shelved file(s) left in place).")
+        print("If this session added content, run `dewey sync --apply` first to shelve it, then retry.")
+        return
+    saved = plan.before_bytes - plan.after_bytes
+    pct = saved / plan.before_bytes * 100 if plan.before_bytes else 0
+    print(f"{len(plan.targets)} grown file(s) at/over {ap.min_tokens} tok can shrink to pointers "
+          f"({ap.skipped_small} smaller left alone):")
+    print(f"  before: {plan.before_bytes/1024:.0f} KB  ->  after: {plan.after_bytes/1024:.1f} KB   ({pct:.0f}% smaller)")
+    if not args.apply:
+        print("\n(dry-run) add --apply to replace those grown silo files with pointers "
+              "(full content stays in the library; recovery log written).")
+        return
+    log = core.write_micronise_log(plan)
+    done = core.apply_micronise(plan)
+    print(f"\n[ok] autostubbed {done} file(s) — grown memory returned to pointers. recovery log: {core.portable(log)}")
 
 
 def cmd_checkout(args: argparse.Namespace) -> None:
@@ -315,6 +343,21 @@ def cmd_state(args: argparse.Namespace) -> None:
     print("  Open loops:  " + (", ".join(st.loops) if st.loops else "(none)"))
 
 
+def cmd_brief(args: argparse.Namespace) -> None:
+    library = Path(args.to).resolve()
+    if not library.is_dir():
+        print(f"error: {library} is not a library directory (run sync first)")
+        raise SystemExit(2)
+    b = brief_mod.build_brief(library, max_pointers=args.max_pointers, token_cap=args.token_cap)
+    if args.json:
+        # Emit a SessionStart hook payload directly, json-escaped — the hook can
+        # echo this as-is, or merge our text with its own protocol block.
+        print(json.dumps({"hookSpecificOutput": {
+            "hookEventName": "SessionStart", "additionalContext": b.text}}))
+        return
+    print(b.text, end="")
+
+
 def cmd_tag(args: argparse.Namespace) -> None:
     library = Path(args.to).resolve()
     if not library.is_dir():
@@ -395,6 +438,48 @@ def cmd_ask(args: argparse.Namespace) -> None:
                   f"tokens ({comp.saved_pct}% lighter) for the model's context.")
         else:
             print(f"\n(compress) {comp.note}")
+
+
+def cmd_research(args: argparse.Namespace) -> None:
+    library = Path(args.to).resolve()
+    if not library.is_dir():
+        print(f"error: {library} is not a library directory (run sync first)")
+        raise SystemExit(2)
+    res = research_mod.capture(library, args.question, model=args.model)
+    if not res.ok:
+        print(f"(research) {res.note}")
+        raise SystemExit(1)
+    print(f"[ok] research captured: {core.portable(res.path)}  ({len(res.citations)} citation(s))")
+    print(f"     recall it later:  dewey ask \"{args.question[:40]}\" --to <library>")
+    if args.show:
+        print("\n" + res.content[:1500] + ("…" if len(res.content) > 1500 else ""))
+
+
+def cmd_ocr(args: argparse.Namespace) -> None:
+    library = Path(args.to).resolve()
+    if not library.is_dir():
+        print(f"error: {library} is not a library directory (run sync first)")
+        raise SystemExit(2)
+    res = ocr_mod.capture(library, Path(args.file))
+    if not res.ok:
+        print(f"(ocr) {res.note}")
+        raise SystemExit(1)
+    print(f"[ok] ocr [{res.method}] -> {core.portable(res.path)}  ({len(res.text)} chars)")
+
+
+def cmd_image(args: argparse.Namespace) -> None:
+    library = Path(args.to).resolve()
+    if not library.is_dir():
+        print(f"error: {library} is not a library directory (run sync first)")
+        raise SystemExit(2)
+    res = image_mod.capture(library, Path(args.file), caption=args.caption)
+    if not res.ok:
+        print(f"(image) {res.note}")
+        raise SystemExit(1)
+    m = res.meta
+    print(f"[ok] image stub -> {core.portable(res.path)}")
+    if "width" in m:
+        print(f"     {m.get('format')} {m['width']}x{m['height']}  palette {m.get('palette')}")
 
 
 def cmd_connectors(args: argparse.Namespace) -> None:
@@ -578,6 +663,13 @@ def main(argv: list[str] | None = None) -> None:
     micronise.add_argument("--apply", action="store_true", help="replace shelved silo files with pointers (re-verified; recovery log written)")
     micronise.set_defaults(fn=cmd_micronise)
 
+    autostub = sub.add_parser("autostub", help="the mantra, automatic: shrink grown, already-synced silo files to pointers past a token threshold (dry-run by default)")
+    autostub.add_argument("--library", required=True, help="the library directory created by sync")
+    autostub.add_argument("--min-tokens", type=int, default=autostub_mod.DEFAULT_MIN_TOKENS, dest="min_tokens",
+                          help=f"only shrink files at/over this many tokens (default {autostub_mod.DEFAULT_MIN_TOKENS})")
+    autostub.add_argument("--apply", action="store_true", help="replace grown silo files with pointers (re-verified; recovery log written)")
+    autostub.set_defaults(fn=cmd_autostub)
+
     checkout = sub.add_parser("checkout", help="restore a shrunk entry to full content (so the assistant can read it)")
     checkout.add_argument("name", nargs="?", help="entry filename, e.g. project_foo.md (omit with --all)")
     checkout.add_argument("--all", action="store_true", help="check out every pointer stub")
@@ -628,6 +720,15 @@ def main(argv: list[str] | None = None) -> None:
     state_p.add_argument("--tag", help="set the active project's tag id (else looked up by project)")
     state_p.set_defaults(fn=cmd_state)
 
+    brief_p = sub.add_parser("brief", help="emit the session-injection brief: STATE + top pointers under a token cap")
+    brief_p.add_argument("--to", required=True, help="the library directory created by sync")
+    brief_p.add_argument("--max-pointers", type=int, default=brief_mod.DEFAULT_MAX_POINTERS,
+                         dest="max_pointers", help=f"max pointers to show (default {brief_mod.DEFAULT_MAX_POINTERS})")
+    brief_p.add_argument("--token-cap", type=int, default=brief_mod.DEFAULT_TOKEN_CAP,
+                         dest="token_cap", help=f"hard token ceiling for the whole brief (default {brief_mod.DEFAULT_TOKEN_CAP})")
+    brief_p.add_argument("--json", action="store_true", help="emit a SessionStart hook JSON payload (json-escaped) instead of plain text")
+    brief_p.set_defaults(fn=cmd_brief)
+
     tag = sub.add_parser("tag", help="backfill a tags block (id·date·project·keywords·size) into every library entry")
     tag.add_argument("--to", required=True, help="the library directory created by sync")
     tag.add_argument("--apply", action="store_true", help="write the tags block into each entry (default: dry-run)")
@@ -646,6 +747,25 @@ def main(argv: list[str] | None = None) -> None:
     ask.add_argument("--limit", type=int, default=8, help="max entries to show (default 8)")
     ask.add_argument("--compress", action="store_true", help="report SuperCompress token savings on the answer context (optional tool)")
     ask.set_defaults(fn=cmd_ask)
+
+    research_p = sub.add_parser("research", help="ask Perplexity and shelve the answer as a recallable library card")
+    research_p.add_argument("question", help="the research question")
+    research_p.add_argument("--to", required=True, help="the library directory created by sync")
+    research_p.add_argument("--model", default=research_mod.DEFAULT_MODEL,
+                            help=f"Perplexity model (default {research_mod.DEFAULT_MODEL})")
+    research_p.add_argument("--show", action="store_true", help="also print the answer to the console")
+    research_p.set_defaults(fn=cmd_research)
+
+    ocr_p = sub.add_parser("ocr", help="read a PDF/image to plain text and shelve it as a recallable card")
+    ocr_p.add_argument("file", help="a .pdf or image file to read")
+    ocr_p.add_argument("--to", required=True, help="the library directory created by sync")
+    ocr_p.set_defaults(fn=cmd_ocr)
+
+    image_p = sub.add_parser("image", help="keep a lightweight recollection stub of an image (pixels stay on disk)")
+    image_p.add_argument("file", help="an image file to stub")
+    image_p.add_argument("--to", required=True, help="the library directory created by sync")
+    image_p.add_argument("--caption", help="an optional human caption to store with the stub")
+    image_p.set_defaults(fn=cmd_image)
 
     con = sub.add_parser("connectors", help="the cockpit connectors/keys hub: subscriptions, BCP, MCP, vault")
     con.add_argument("op", choices=["state", "list", "keys", "spend", "setcost", "bcp", "mcp", "vault", "key", "tokens", "budget"])

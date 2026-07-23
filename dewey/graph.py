@@ -45,7 +45,7 @@ class GraphBuild:
     artifacts: list[Path]
 
 
-def build_graph(library: Path, *, timeout: int = 900) -> GraphBuild:
+def build_graph(library: Path, *, timeout: int = 1800) -> GraphBuild:
     """Run Graphify over the sanitised library; drop artifacts in library/_graph.
 
     We point Graphify ONLY at the synced library — the 16 secret-named files were
@@ -99,24 +99,53 @@ def _entries_by_name(library: Path) -> dict[str, core.Entry]:
 
 _STOP = {"the", "a", "an", "of", "for", "to", "and", "or", "in", "on", "is", "what",
          "how", "why", "who", "when", "where", "with", "my", "our", "me", "do", "does"}
+# Per-silo index/signpost files — demoted in a fact query so the real card wins.
+_INDEX_FILES = {"memory.md"}
+
+
+def _score_entry(e: core.Entry, terms: list[str]) -> float:
+    """Weight a term by WHERE it lands: name/description are the spine label (the
+    subject of the card), the body is just the pages. So a small card whose NAME is
+    'screenshots-location' beats a bloated index that merely mentions screenshots once.
+    Index/hub files (MEMORY.md, _*.md) are demoted — a fact query wants the card, not the index."""
+    name = e.name.lower()
+    summ = e.summary.lower()
+    tagtxt = " ".join(str(v) for v in e.tags.values()).lower()
+    try:
+        body = e.path.read_text(encoding="utf-8", errors="ignore").lower()
+    except OSError:
+        body = ""
+    score = 0.0
+    for t in terms:
+        if t in name:
+            score += 6.0
+        if t in summ:
+            score += 4.0
+        if t in tagtxt:
+            score += 2.0
+        hits = body.count(t)
+        if hits:
+            score += min(hits, 5) / 2.0  # body counts, but capped so volume can't drown a focused card
+    if name in _INDEX_FILES or name.startswith("_"):
+        score *= 0.35  # the index is a signpost, not the answer
+    return score
 
 
 def _ranked_keyword(library: Path, question: str) -> list[core.Entry]:
-    """Ranked OR-match: score each entry by how many question terms it hits.
+    """Ranked OR-match: score each entry, weighting name/summary over body.
 
     Dewey's own `search_library` is strict AND (every term must appear) — which
-    returns nothing for a natural-language question. This ranked OR fallback is
-    both useful today and the honest baseline the graph must beat.
+    returns nothing for a natural-language question. This ranked fallback is both
+    useful today and the honest baseline the graph must beat.
     """
     terms = [t for t in re.split(r"\W+", question.lower()) if t and t not in _STOP and len(t) > 2]
     if not terms:
         return core.library_entries(library)
-    scored: list[tuple[int, core.Entry]] = []
+    scored: list[tuple[float, core.Entry]] = []
     for e in core.library_entries(library):
-        hay = core.entry_haystack(e)  # name + class + summary + tags + BODY
-        score = sum(1 for t in terms if t in hay)
-        if score:
-            scored.append((score, e))
+        s = _score_entry(e, terms)
+        if s > 0:
+            scored.append((s, e))
     scored.sort(key=lambda se: (-se[0], se[1].name))
     return [e for _, e in scored]
 
