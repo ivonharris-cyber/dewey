@@ -2,6 +2,26 @@
 
 All notable changes to Dewey are documented here. This project follows [Semantic Versioning](https://semver.org).
 
+## [0.16.1] — 2026-07-23
+
+Hardening of the Cycle-1 SessionStart injection — it was silently degrading to
+protocol-only.
+
+### Fixed
+- **`hooks/ivon-session-start.sh` no longer loses the brief to Windows `timeout.exe`.**
+  The hook wrapped `dewey brief` in `timeout 20 …`; in the harness's SessionStart bash
+  `timeout` resolved to Windows `timeout.exe` (interactive, no `--version`), which dies on
+  redirected stdin. The `|| true` fail-open then swallowed it, so sessions opened with only
+  the static IVON PROTOCOL text — never the brief. Now the hook only uses `timeout` when it
+  is GNU coreutils (`timeout --version` succeeds), else runs Python directly.
+
+### Added
+- **Current local time injected** (`CURRENT TIME: <day date HH:MM TZ>`) between the protocol
+  and the brief.
+- **`~/.claude/hooks/dewey-brief.log`** — every fire logs brief length + OK/EMPTY, so a
+  broken injection is visible next session instead of silently swallowed.
+- Robust Python resolution in the hook (hardcoded path → PATH `python`/`python3` fallback).
+
 ## [0.16.0] — 2026-07-23
 
 The **Leeloo upgrade, Cycle 3** — intake skills: capture research, PDFs, and images into recallable memory.
